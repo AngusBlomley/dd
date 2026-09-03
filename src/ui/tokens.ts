@@ -186,6 +186,13 @@ export function renderInspector(): void {
       <input type="range" id="insDim" min="0" max="24">
     </div>
     <div class="check-row"><input type="checkbox" id="insHidden"><label for="insHidden">Hidden from players</label></div>
+    <div id="insNpc">
+      <label class="field">Role (shown to players)</label>
+      <input type="text" id="insRole" placeholder="e.g. Innkeeper, guard captain, fungus farmer">
+      <label class="field">Trade (what they offer, shown to players)</label>
+      <textarea id="insTrade" rows="4" placeholder="e.g. Rooms 5 sp a night. Sells rations, torches and rope. Buys gems."></textarea>
+      <div class="hint">Players tap this NPC to read the name, role and trade.</div>
+    </div>
     <div id="insExit"></div>
     <button class="btn danger full-btn" id="insDelete" style="margin-top:14px">Remove Token</button>`;
 
@@ -216,6 +223,8 @@ export function renderInspector(): void {
   f<HTMLInputElement>('insBright').value = String(tok.light ? tok.light.bright : DEFAULT_TOKEN_LIGHT.bright);
   f<HTMLInputElement>('insDim').value = String(tok.light ? tok.light.dim : DEFAULT_TOKEN_LIGHT.dim);
   f<HTMLInputElement>('insHidden').checked = !!tok.hidden;
+  f<HTMLInputElement>('insRole').value = tok.role ?? '';
+  f<HTMLTextAreaElement>('insTrade').value = tok.trade ?? '';
 
   const syncLabels = () => {
     const v = f<HTMLInputElement>('insVision').value;
@@ -224,6 +233,7 @@ export function renderInspector(): void {
     f('insBrightVal').textContent = b + ' sq (' + ft(+b) + ')';
     f('insDimVal').textContent = d + ' sq (' + ft(+d) + ')';
     f('insLightWrap').style.display = f<HTMLInputElement>('insLight').checked ? 'block' : 'none';
+    f('insNpc').style.display = f<HTMLSelectElement>('insType').value === 'npc' ? 'block' : 'none';
   };
   syncLabels();
 
@@ -247,12 +257,14 @@ export function renderInspector(): void {
       ? { bright: parseInt(f<HTMLInputElement>('insBright').value, 10), dim }
       : null;
     tok.hidden = f<HTMLInputElement>('insHidden').checked;
+    tok.role = f<HTMLInputElement>('insRole').value.trim() || undefined;
+    tok.trade = f<HTMLTextAreaElement>('insTrade').value.trim() || undefined;
     syncLabels();
     markChanged();
     renderTokenList();
     requestRender();
   };
-  body.querySelectorAll('input,select').forEach(elm => elm.addEventListener('input', commit));
+  body.querySelectorAll('input,select,textarea').forEach(elm => elm.addEventListener('input', commit));
   f('insDelete').addEventListener('click', () => deleteToken(tok.id));
 }
 

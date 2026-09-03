@@ -10,6 +10,8 @@ export interface ViewCell { t: string; w: boolean; d: boolean; doOpen: boolean; 
 export interface ViewToken {
   id: number; initials: string; color: string; size: number; x: number; y: number;
   light: boolean; pc: boolean;
+  /** NPCs only: what players learn by tapping them. */
+  info?: { name: string; role: string; trade: string };
 }
 
 export interface MapView {
@@ -84,6 +86,7 @@ function sameTokens(a: ViewToken[], b: ViewToken[]): boolean {
     const x = a[i], y = b[i];
     if (x.id !== y.id || x.x !== y.x || x.y !== y.y || x.color !== y.color || x.initials !== y.initials ||
         x.size !== y.size || x.light !== y.light || x.pc !== y.pc) return false;
+    if ((x.info?.name ?? '') !== (y.info?.name ?? '') || (x.info?.role ?? '') !== (y.info?.role ?? '') || (x.info?.trade ?? '') !== (y.info?.trade ?? '')) return false;
   }
   return true;
 }

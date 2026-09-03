@@ -95,6 +95,25 @@ describe('prop descriptions for players (issue #21)', () => {
   });
 });
 
+describe('NPC role and trade (issue #22)', () => {
+  it('sends name, role and trade for NPCs only, and diffs a changed trade', () => {
+    const m = corridorMap();
+    m.tokens.push(
+      token({ id: 1, name: 'Sir Aldric', type: 'pc', x: 5, y: 1, light: { bright: 6, dim: 6 } }),
+      token({ id: 2, name: 'Old Brannoc', type: 'npc', x: 7, y: 1, role: 'Innkeeper', trade: 'Rooms 5 sp a night.' }),
+      token({ id: 3, name: 'Lurker', type: 'monster', x: 8, y: 1, role: 'should not leak' }),
+    );
+    const view = buildMapView(m, computeScene(m.grid, m.tokens));
+    expect(view.tokens.find(t => t.id === 1)!.info).toBeUndefined();
+    expect(view.tokens.find(t => t.id === 2)!.info).toEqual({ name: 'Old Brannoc', role: 'Innkeeper', trade: 'Rooms 5 sp a night.' });
+    expect(view.tokens.find(t => t.id === 3)!.info).toBeUndefined();
+    expect(JSON.stringify(view)).not.toContain('Aldric');
+    m.tokens[1].trade = 'Closed for the night.';
+    const patch = diffViews(view, buildMapView(m, computeScene(m.grid, m.tokens)))!;
+    expect(patch.tokens!.find(t => t.id === 2)!.info!.trade).toBe('Closed for the night.');
+  });
+});
+
 describe('view diffing', () => {
   function mk(): MapView {
     return { mapId: 'a', name: 'A', w: 3, h: 1, cells: [null, { t: 's', w: false, d: false, doOpen: false, p: null }, null], see: [0, 3, 0], intensity: [0, 255, 0], tokens: [] };

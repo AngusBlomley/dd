@@ -139,6 +139,8 @@ function tapCell(x: number, y: number): void {
   if (!t || !view) return;
   const cell = view.cells[y * view.w + x];
   if (!cell) return;
+  const npc = view.tokens.find(k => k.x === x && k.y === y && k.info);
+  if (npc) { openLoot(x, y); return; }                                        // an NPC: name, role, trade (issue #22)
   if (cell.p && view.see[y * view.w + x] > 0) { openLoot(x, y); return; }   // any visible prop: name, facts, DM text (issue #21)
   if (!cell.d) return;
   if (Math.max(Math.abs(t.x - x), Math.abs(t.y - y)) > 1) { toast('You need to be next to the door.'); return; }
@@ -181,6 +183,10 @@ function renderNearby(): void {
 
 /** What the sheet shows for a cell: the DM's text if any, else the prop's own name and facts. */
 function infoFor(x: number, y: number): { title: string; text: string; canTake: boolean } | null {
+  const npc = view?.tokens.find(k => k.x === x && k.y === y && k.info);
+  if (npc?.info) {
+    return { title: npc.info.name + (npc.info.role ? ' · ' + npc.info.role : ''), text: npc.info.trade || 'Nothing to trade right now.', canTake: false };
+  }
   const c = view?.cells[y * view.w + x];
   if (!c?.p) return null;
   const pd = PROP_MAP[c.p];

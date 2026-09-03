@@ -14,8 +14,11 @@ function sampleMap(): MapRecord {
     tokens: [{
       id: 1, name: 'Spider', type: 'monster' as const, x: 1, y: 1, color: '#a13a2d', size: 1,
       vision: { radius: 12, darkvision: 12 }, light: null, hidden: true,
+    }, {
+      id: 2, name: 'Old Brannoc', type: 'npc' as const, x: 2, y: 1, color: '#3f6fae', size: 1,
+      vision: { radius: 12, darkvision: 0 }, light: null, role: 'Innkeeper', trade: 'Rooms 5 sp.',
     }],
-    nextTokenId: 2,
+    nextTokenId: 3,
   };
 }
 
@@ -31,7 +34,7 @@ describe('map JSON round trip', () => {
     expect(cellAt(parsed.grid, 3, 2)!.p).toBe('torch');
     expect(cellAt(parsed.grid, 4, 2)!.secret).toBe(true);
     expect(parsed.tokens).toEqual(m.tokens);
-    expect(parsed.nextTokenId).toBe(2);
+    expect(parsed.nextTokenId).toBe(3);
   });
 
   it('migrates a prototype-1 export, including its token shape and explored flag', () => {

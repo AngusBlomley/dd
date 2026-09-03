@@ -99,6 +99,8 @@ function migrateToken(raw: Token | LegacyToken): Token {
     ...t,
     vision: { radius: t.vision?.radius ?? 12, darkvision: t.vision?.darkvision ?? 0 },
     light: t.light ? { bright: t.light.bright, dim: t.light.dim } : null,
+    role: typeof t.role === 'string' ? t.role : undefined,
+    trade: typeof t.trade === 'string' ? t.trade : undefined,
   };
 }
 

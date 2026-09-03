@@ -20,7 +20,9 @@ export function initialsOf(name: string): string {
 }
 
 export function publicToken(t: Token): ViewToken {
-  return { id: t.id, initials: initialsOf(t.name), color: t.color, size: t.size, x: t.x, y: t.y, light: !!t.light, pc: isPartyToken(t) };
+  const out: ViewToken = { id: t.id, initials: initialsOf(t.name), color: t.color, size: t.size, x: t.x, y: t.y, light: !!t.light, pc: isPartyToken(t) };
+  if (t.type === 'npc') out.info = { name: t.name, role: t.role ?? '', trade: t.trade ?? '' };
+  return out;
 }
 
 export function buildMapView(map: MapRecord, scene: Scene): MapView {

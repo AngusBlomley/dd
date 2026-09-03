@@ -117,6 +117,8 @@ export interface Token {
   vision: { radius: number; darkvision: number }; // cells; darkvision 0 = none
   light: LightSpec | null;                        // carried light, if any
   hidden?: boolean;                               // DM-only, never shown to players
+  role?: string;                                  // NPCs: what they are (innkeeper, guard captain…)
+  trade?: string;                                 // NPCs: what they offer, shown to players
 }
 
 /** Props that can carry a description and be picked up by players. */
