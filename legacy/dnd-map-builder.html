@@ -1,0 +1,1428 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Cartographer's Table — DnD Map Builder</title>
+<style>
+:root{
+  --void:#100d09;
+  --stone-950:#191410;
+  --stone-900:#211a14;
+  --stone-800:#2b2219;
+  --stone-700:#3a2f22;
+  --panel-border:#5c4a32;
+  --panel-border-lo:#40331f;
+  --parchment:#e6d7ab;
+  --parchment-dim:#b8a978;
+  --ink:#2a2013;
+  --amber:#dd9b34;
+  --amber-hi:#f4b94a;
+  --fire:#ff7a29;
+  --teal:#4f8a79;
+  --danger:#b0432f;
+  --ok:#5f9457;
+  --font-display:Georgia,'Iowan Old Style','Palatino Linotype',serif;
+  --font-ui:'Segoe UI',system-ui,-apple-system,sans-serif;
+}
+*{box-sizing:border-box;}
+html,body{height:100%;margin:0;}
+body{
+  background:var(--void);
+  color:var(--parchment);
+  font-family:var(--font-ui);
+  overflow:hidden;
+}
+#app{display:flex;flex-direction:column;height:100vh;}
+
+/* ---------- Topbar ---------- */
+#topbar{
+  display:flex;align-items:center;gap:14px;
+  padding:10px 16px;
+  background:linear-gradient(180deg,var(--stone-800),var(--stone-900));
+  border-bottom:2px solid var(--panel-border);
+  flex-shrink:0;
+}
+#topbar h1{
+  font-family:var(--font-display);
+  font-size:19px;font-weight:700;letter-spacing:.3px;
+  color:var(--amber-hi);
+  margin:0;padding-right:8px;
+  border-right:1px solid var(--panel-border-lo);
+  white-space:nowrap;
+}
+.topbar-group{display:flex;gap:6px;align-items:center;}
+.spacer{flex:1;}
+.btn{
+  background:var(--stone-700);
+  border:1px solid var(--panel-border);
+  color:var(--parchment);
+  padding:7px 12px;
+  font-size:13px;
+  font-family:var(--font-ui);
+  border-radius:3px;
+  cursor:pointer;
+  transition:background .12s,border-color .12s;
+  white-space:nowrap;
+}
+.btn:hover{background:#443626;border-color:var(--amber);}
+.btn:active{transform:translateY(1px);}
+.btn.primary{background:linear-gradient(180deg,#c97a25,#a85f18);border-color:#8a4d13;color:#1a1206;font-weight:600;}
+.btn.primary:hover{background:linear-gradient(180deg,#da8a2e,#b56920);}
+.btn.danger{background:#4a2019;border-color:#6b2c22;}
+.btn.danger:hover{background:#5c281f;}
+.btn.small{padding:4px 9px;font-size:12px;}
+.btn.toggle.active{background:var(--amber);color:#241905;border-color:var(--amber-hi);font-weight:700;}
+.btn:disabled{opacity:.4;cursor:not-allowed;}
+
+/* ---------- Layout ---------- */
+#main{flex:1;display:flex;min-height:0;}
+#sidebar{
+  width:250px;flex-shrink:0;
+  background:var(--stone-900);
+  border-right:2px solid var(--panel-border);
+  display:flex;flex-direction:column;
+  overflow:hidden;
+}
+#inspector{
+  width:230px;flex-shrink:0;
+  background:var(--stone-900);
+  border-left:2px solid var(--panel-border);
+  overflow-y:auto;
+  padding:12px;
+}
+.tabs{display:flex;flex-wrap:wrap;background:var(--stone-950);border-bottom:1px solid var(--panel-border-lo);}
+.tab{
+  flex:1 1 33%;text-align:center;padding:8px 2px;font-size:11.5px;
+  cursor:pointer;color:var(--parchment-dim);border-bottom:2px solid transparent;
+  user-select:none;
+}
+.tab:hover{color:var(--parchment);}
+.tab.active{color:var(--amber-hi);border-bottom-color:var(--amber);background:var(--stone-800);}
+.panel{display:none;padding:12px;overflow-y:auto;flex:1;min-height:0;}
+.panel.active{display:block;}
+.section-label{
+  font-family:var(--font-display);
+  color:var(--amber-hi);font-size:13px;margin:14px 0 6px;
+  border-bottom:1px solid var(--panel-border-lo);padding-bottom:3px;
+}
+.section-label:first-child{margin-top:0;}
+.swatch-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;}
+.swatch{
+  border:2px solid var(--panel-border-lo);border-radius:4px;
+  padding:6px 3px;text-align:center;cursor:pointer;font-size:10.5px;
+  color:var(--parchment);background:var(--stone-800);
+  display:flex;flex-direction:column;align-items:center;gap:4px;
+}
+.swatch .chip{width:22px;height:22px;border-radius:3px;border:1px solid rgba(0,0,0,.4);}
+.swatch:hover{border-color:var(--amber);}
+.swatch.selected{border-color:var(--amber-hi);background:#3a2c17;box-shadow:0 0 0 1px var(--amber-hi) inset;}
+.prop-icon{font-size:18px;line-height:1;}
+label.field{display:block;font-size:12px;color:var(--parchment-dim);margin:8px 0 3px;}
+input[type=text],input[type=number],select,input[type=color]{
+  width:100%;background:var(--stone-800);border:1px solid var(--panel-border-lo);
+  color:var(--parchment);padding:5px 7px;border-radius:3px;font-size:12.5px;font-family:var(--font-ui);
+}
+input[type=color]{padding:2px;height:30px;cursor:pointer;}
+input[type=range]{width:100%;}
+.row2{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
+.check-row{display:flex;align-items:center;gap:7px;margin:8px 0;font-size:12.5px;color:var(--parchment);}
+.check-row input{width:16px;height:16px;}
+.hint{font-size:11px;color:var(--parchment-dim);line-height:1.4;margin-top:4px;}
+.full-btn{width:100%;margin-top:10px;}
+
+/* ---------- Canvas area ---------- */
+#canvas-wrap{
+  flex:1;overflow:auto;position:relative;
+  background:
+    radial-gradient(ellipse at center,#1c1712 0%,var(--void) 75%);
+  background-size:24px 24px, 100% 100%;
+}
+#canvas-wrap::before{
+  content:"";position:absolute;inset:0;pointer-events:none;
+  background-image:radial-gradient(rgba(255,255,255,.02) 1px,transparent 1px);
+  background-size:22px 22px;
+}
+#mapCanvas{display:block;image-rendering:pixelated;cursor:crosshair;}
+#mapCanvas.tool-pan{cursor:grab;}
+#mapCanvas.tool-pan.panning{cursor:grabbing;}
+#mapCanvas.tool-select{cursor:pointer;}
+
+#hover-coord{
+  position:absolute;bottom:8px;left:8px;
+  background:rgba(20,16,10,.85);border:1px solid var(--panel-border);
+  padding:3px 8px;font-size:11px;border-radius:3px;color:var(--parchment-dim);
+  pointer-events:none;
+}
+#zoom-controls{
+  position:absolute;top:8px;right:8px;display:flex;gap:4px;
+  background:rgba(20,16,10,.85);border:1px solid var(--panel-border);border-radius:4px;padding:4px;
+}
+
+/* ---------- Statusbar ---------- */
+#statusbar{
+  flex-shrink:0;background:var(--stone-950);border-top:1px solid var(--panel-border-lo);
+  padding:5px 14px;font-size:11.5px;color:var(--parchment-dim);
+  display:flex;gap:18px;
+}
+#statusbar b{color:var(--amber);}
+
+/* ---------- Inspector ---------- */
+.token-list-item{
+  display:flex;align-items:center;gap:8px;padding:6px 7px;border-radius:3px;
+  border:1px solid var(--panel-border-lo);margin-bottom:5px;cursor:pointer;background:var(--stone-800);
+}
+.token-list-item:hover{border-color:var(--amber);}
+.token-list-item.selected{border-color:var(--amber-hi);background:#3a2c17;}
+.tok-dot{width:16px;height:16px;border-radius:50%;border:1px solid rgba(0,0,0,.5);flex-shrink:0;}
+.token-list-item .tname{flex:1;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.token-list-item .tdel{color:var(--danger);font-size:13px;cursor:pointer;padding:0 3px;}
+.empty-note{color:var(--parchment-dim);font-size:12px;font-style:italic;text-align:center;padding:20px 6px;}
+
+/* ---------- Modal ---------- */
+.modal-overlay{
+  position:fixed;inset:0;background:rgba(8,6,4,.72);
+  display:flex;align-items:center;justify-content:center;z-index:50;
+}
+.modal-overlay.hidden{display:none;}
+.modal-box{
+  background:var(--stone-900);border:2px solid var(--panel-border);border-radius:6px;
+  width:380px;max-width:90vw;max-height:80vh;overflow-y:auto;
+  padding:18px 20px;box-shadow:0 12px 40px rgba(0,0,0,.6);
+}
+.modal-box h2{font-family:var(--font-display);color:var(--amber-hi);margin:0 0 12px;font-size:17px;}
+.modal-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:16px;}
+.saved-map-row{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:8px 9px;border:1px solid var(--panel-border-lo);border-radius:4px;margin-bottom:6px;background:var(--stone-800);
+}
+.saved-map-row .smname{font-size:13px;}
+.saved-map-row .smbtns{display:flex;gap:6px;}
+::-webkit-scrollbar{width:10px;height:10px;}
+::-webkit-scrollbar-track{background:var(--stone-950);}
+::-webkit-scrollbar-thumb{background:var(--stone-700);border-radius:5px;border:2px solid var(--stone-950);}
+</style>
+</head>
+<body>
+<div id="app">
+
+  <div id="topbar">
+    <h1>&#9876;&#65039; Cartographer's Table</h1>
+    <div class="topbar-group">
+      <button class="btn" id="btnNewMap">New Map</button>
+      <button class="btn" id="btnSave">Save</button>
+      <button class="btn" id="btnLoad">Load</button>
+      <button class="btn" id="btnExportPng">Export PNG</button>
+      <button class="btn" id="btnExportJson">Export JSON</button>
+      <button class="btn" id="btnImportJson">Import JSON</button>
+      <input type="file" id="fileImport" accept=".json" style="display:none">
+    </div>
+    <div class="spacer"></div>
+    <div class="topbar-group">
+      <button class="btn" id="btnUndo" title="Undo (Ctrl+Z)">&#8630; Undo</button>
+      <button class="btn toggle" id="btnDmPreview" title="Preview what players currently see, without leaving DM mode">Preview Lighting</button>
+      <button class="btn primary toggle" id="btnPlayerView">Player View</button>
+    </div>
+  </div>
+
+  <div id="main">
+    <div id="sidebar">
+      <div class="tabs">
+        <div class="tab active" data-panel="terrain">Terrain</div>
+        <div class="tab" data-panel="walls">Walls&nbsp;/&nbsp;Doors</div>
+        <div class="tab" data-panel="props">Props</div>
+        <div class="tab" data-panel="tokens">Tokens</div>
+        <div class="tab" data-panel="generate">Generate</div>
+        <div class="tab" data-panel="mapsettings">Map</div>
+      </div>
+
+      <div class="panel active" id="panel-terrain">
+        <div class="section-label">Paint Background</div>
+        <div class="swatch-grid" id="terrainSwatches"></div>
+        <div class="section-label">Brush</div>
+        <div class="row2">
+          <button class="btn small" id="brushSingle">Single Cell</button>
+          <button class="btn small" id="brushRect">Rectangle</button>
+        </div>
+        <div class="hint">Click-drag to paint. Rectangle brush: click-drag to fill an area.</div>
+      </div>
+
+      <div class="panel" id="panel-walls">
+        <div class="section-label">Structure</div>
+        <div class="swatch-grid">
+          <div class="swatch" data-tool="wall"><div class="chip" style="background:#4a4038;background-image:linear-gradient(135deg,#5a4f45,#2c2620)"></div>Wall</div>
+          <div class="swatch" data-tool="door"><div class="chip prop-icon" style="background:#6b4a2c">&#128682;</div>Door</div>
+          <div class="swatch" data-tool="eraser"><div class="chip" style="background:#111"></div>Erase</div>
+        </div>
+        <div class="hint">Walls block movement, sight and light. Doors block sight only while closed — click a placed door on the map to toggle it open/closed.</div>
+      </div>
+
+      <div class="panel" id="panel-props">
+        <div class="section-label">Place Prop</div>
+        <div class="swatch-grid" id="propSwatches"></div>
+        <div class="hint">Torches and any prop marked "light" cast illumination. Pillars &amp; statues block sight like a thin wall.</div>
+      </div>
+
+      <div class="panel" id="panel-tokens">
+        <div class="section-label">New Token</div>
+        <label class="field">Name</label>
+        <input type="text" id="newTokName" placeholder="e.g. Sir Aldric">
+        <label class="field">Type</label>
+        <select id="newTokType">
+          <option value="pc">Player Character</option>
+          <option value="npc">NPC / Ally</option>
+          <option value="monster">Monster / Enemy</option>
+          <option value="object">Object / Marker</option>
+        </select>
+        <div class="row2">
+          <div>
+            <label class="field">Color</label>
+            <input type="color" id="newTokColor" value="#4f8a79">
+          </div>
+          <div>
+            <label class="field">Size</label>
+            <select id="newTokSize">
+              <option value="0.6">Tiny</option>
+              <option value="1" selected>Small/Medium</option>
+              <option value="1.5">Large</option>
+              <option value="2">Huge</option>
+              <option value="3">Gargantuan</option>
+            </select>
+          </div>
+        </div>
+        <label class="field">Vision Radius: <span id="visionVal">6</span> squares (30ft)</label>
+        <input type="range" id="newTokVision" min="0" max="20" value="6">
+        <div class="check-row"><input type="checkbox" id="newTokDark"><label for="newTokDark">Darkvision (sees in the dark, no light needed)</label></div>
+        <div class="check-row"><input type="checkbox" id="newTokLight"><label for="newTokLight">Carries a light source</label></div>
+        <div id="tokLightRadiusWrap" style="display:none">
+          <label class="field">Light Radius: <span id="lightVal">4</span> squares</label>
+          <input type="range" id="newTokLightRadius" min="1" max="12" value="4">
+        </div>
+        <button class="btn primary full-btn" id="btnArmToken">Place on Map &#8594;</button>
+        <div class="hint" id="armHint" style="display:none">Click a cell on the map to place this token.</div>
+
+        <div class="section-label">Tokens on Map</div>
+        <div id="tokenList"></div>
+      </div>
+
+      <div class="panel" id="panel-generate">
+        <div class="section-label">Dungeon Generator</div>
+        <div class="row2">
+          <div><label class="field">Width</label><input type="number" id="genW" value="34" min="10" max="80"></div>
+          <div><label class="field">Height</label><input type="number" id="genH" value="24" min="10" max="60"></div>
+        </div>
+        <label class="field">Theme</label>
+        <select id="genTheme">
+          <option value="stone">Dungeon (stone)</option>
+          <option value="cave">Cave (natural)</option>
+          <option value="crypt">Crypt (dark stone)</option>
+          <option value="wood">Keep (wood floors)</option>
+        </select>
+        <label class="field">Room Count: <span id="genRoomsVal">10</span></label>
+        <input type="range" id="genRooms" min="3" max="24" value="10">
+        <div class="row2">
+          <div><label class="field">Min Room Size</label><input type="number" id="genRoomMin" value="4" min="3" max="12"></div>
+          <div><label class="field">Max Room Size</label><input type="number" id="genRoomMax" value="9" min="3" max="20"></div>
+        </div>
+        <label class="field">Pillar Density</label>
+        <select id="genPillars"><option value="0">None</option><option value="0.15">Sparse</option><option value="0.35" selected>Normal</option><option value="0.6">Dense</option></select>
+        <label class="field">Torch Density</label>
+        <select id="genTorches"><option value="0">None</option><option value="0.2">Sparse</option><option value="0.45" selected>Normal</option><option value="0.7">Dense</option></select>
+        <div class="row2">
+          <div><label class="field">Stairs Up</label><input type="number" id="genStairsUp" value="1" min="0" max="5"></div>
+          <div><label class="field">Stairs Down</label><input type="number" id="genStairsDown" value="1" min="0" max="5"></div>
+        </div>
+        <label class="field">Seed (optional — reuse for the same layout)</label>
+        <input type="text" id="genSeed" placeholder="leave blank for random">
+        <button class="btn primary full-btn" id="btnGenerate">&#127922; Generate Dungeon</button>
+        <div class="hint">Generating replaces the current layout (walls, floors, doors &amp; props). Existing tokens are kept in place.</div>
+      </div>
+
+      <div class="panel" id="panel-mapsettings">
+        <div class="section-label">Map Size</div>
+        <div class="row2">
+          <div><label class="field">Width</label><input type="number" id="mapW" min="10" max="100"></div>
+          <div><label class="field">Height</label><input type="number" id="mapH" min="10" max="80"></div>
+        </div>
+        <button class="btn full-btn" id="btnResize">Resize Map</button>
+        <div class="hint">Resizing keeps the top-left area of your map and clips or extends the rest.</div>
+        <div class="section-label">Fog Memory</div>
+        <button class="btn full-btn" id="btnClearFog">Reset Explored Fog</button>
+        <div class="hint">Forgets everywhere the party has already seen, so Player View starts fully dark again.</div>
+        <div class="section-label">About Lighting</div>
+        <div class="hint">In Player View, cells are pitch black until a token's vision reaches them <i>and</i> they're lit — by a torch/prop, or by a token carrying light. Tokens with darkvision see within their radius even unlit. Previously-seen cells stay dimly visible as memory once vision moves away, like a real party's recollection of a room.</div>
+      </div>
+    </div>
+
+    <div id="canvas-wrap">
+      <canvas id="mapCanvas"></canvas>
+      <div id="hover-coord">—</div>
+      <div id="zoom-controls">
+        <button class="btn small" id="zoomOut">&minus;</button>
+        <button class="btn small" id="zoomReset">100%</button>
+        <button class="btn small" id="zoomIn">&plus;</button>
+        <button class="btn small toggle" id="btnPanTool" title="Pan tool (or hold Space)">&#9995; Pan</button>
+      </div>
+    </div>
+
+    <div id="inspector">
+      <div class="section-label" style="margin-top:0">Selection</div>
+      <div id="inspectorBody"><div class="empty-note">Select a token on the map, or in the Tokens tab, to edit it here.</div></div>
+    </div>
+  </div>
+
+  <div id="statusbar">
+    <span>Tool: <b id="statTool">Terrain Brush</b></span>
+    <span>Map: <b id="statSize">—</b></span>
+    <span>Tokens: <b id="statTokens">0</b></span>
+    <span>View: <b id="statView">DM</b></span>
+  </div>
+</div>
+
+<div class="modal-overlay hidden" id="modalSave">
+  <div class="modal-box">
+    <h2>Save Map</h2>
+    <label class="field">Map Name</label>
+    <input type="text" id="saveNameInput" placeholder="e.g. Goblin Warren, Level 1">
+    <div class="modal-actions">
+      <button class="btn" id="saveCancelBtn">Cancel</button>
+      <button class="btn primary" id="saveConfirmBtn">Save</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay hidden" id="modalLoad">
+  <div class="modal-box">
+    <h2>Load Map</h2>
+    <div id="savedMapsList"></div>
+    <div class="modal-actions">
+      <button class="btn" id="loadCancelBtn">Close</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+"use strict";
+
+/* ============================================================
+   DATA DEFINITIONS
+============================================================ */
+const TERRAINS = [
+  {id:'stone', name:'Stone Floor', color:'#8a8378'},
+  {id:'wood',  name:'Wood Floor',  color:'#a2794f'},
+  {id:'grass', name:'Grass',       color:'#57813f'},
+  {id:'dirt',  name:'Dirt',        color:'#77593a'},
+  {id:'sand',  name:'Sand',        color:'#d3bd85'},
+  {id:'water', name:'Water',       color:'#356e9c'},
+  {id:'lava',  name:'Lava',        color:'#c1441c'},
+  {id:'cave',  name:'Cave Floor',  color:'#5b5648'},
+  {id:'void',  name:'Void',        color:'#0c0a08'}
+];
+const TERRAIN_MAP = {}; TERRAINS.forEach(t=>TERRAIN_MAP[t.id]=t);
+
+const PROPS = [
+  {id:'torch',  name:'Torch',       icon:'\u{1F525}', light:true, radius:4, blocksLOS:false, blocksMove:false},
+  {id:'pillar', name:'Pillar',      icon:'\u{1F532}', light:false, blocksLOS:true, blocksMove:true},
+  {id:'statue', name:'Statue',      icon:'\u{1F5FF}', light:false, blocksLOS:true, blocksMove:true},
+  {id:'chest',  name:'Chest',       icon:'\u{1F4E6}', light:false, blocksLOS:false, blocksMove:false},
+  {id:'table',  name:'Table',       icon:'\u25AC', light:false, blocksLOS:false, blocksMove:false},
+  {id:'barrel', name:'Barrel',      icon:'\u{1F6E2}\u{FE0F}', light:false, blocksLOS:false, blocksMove:false},
+  {id:'stairs_up',   name:'Stairs Up',   icon:'\u25B2', light:false, blocksLOS:false, blocksMove:false},
+  {id:'stairs_down', name:'Stairs Down', icon:'\u25BC', light:false, blocksLOS:false, blocksMove:false},
+  {id:'treasure', name:'Treasure', icon:'\u{1F4B0}', light:false, blocksLOS:false, blocksMove:false},
+  {id:'rubble', name:'Rubble',     icon:'\u26F0\u{FE0F}', light:false, blocksLOS:false, blocksMove:false},
+  {id:'altar',  name:'Altar',      icon:'\u271D\u{FE0F}', light:false, blocksLOS:false, blocksMove:false},
+  {id:'bones',  name:'Bones',      icon:'\u2620\u{FE0F}', light:false, blocksLOS:false, blocksMove:false},
+  {id:'web',    name:'Web',        icon:'\u{1F578}\u{FE0F}', light:false, blocksLOS:false, blocksMove:false}
+];
+const PROP_MAP = {}; PROPS.forEach(p=>PROP_MAP[p.id]=p);
+
+const TOKEN_TYPE_COLORS = {pc:'#4f8a79', npc:'#3f6fae', monster:'#a13a2d', object:'#8a7a4a'};
+
+/* ============================================================
+   PRNG (seeded) — mulberry32
+============================================================ */
+function makeRng(seedStr){
+  let seed;
+  if(seedStr === undefined || seedStr === null || seedStr === ''){
+    seed = (Math.random()*4294967296)>>>0;
+  } else {
+    seed = 0;
+    const s = String(seedStr);
+    for(let i=0;i<s.length;i++){ seed = (seed*31 + s.charCodeAt(i)) >>> 0; }
+  }
+  return function(){
+    seed |= 0; seed = (seed + 0x6D2B79F5) | 0;
+    let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+/* ============================================================
+   STATE
+============================================================ */
+const state = {
+  gridW: 34, gridH: 24,
+  cells: [], // row-major array of cell objects
+  tokens: [], // {id,name,type,x,y,color,size,vision,darkvision,hasLight,lightRadius}
+  nextTokenId: 1,
+  selectedTerrain: 'stone',
+  selectedProp: 'torch',
+  tool: 'terrain', // terrain | wall | door | prop | eraser | select | token | pan
+  brushMode: 'single', // single | rect
+  playerView: false,
+  dmPreview: false,
+  zoom: 1,
+  baseCell: 28,
+  selectedTokenId: null,
+  pendingTokenConfig: null, // set when "Place on Map" armed
+  panActive: false,
+};
+
+function newCell(terrain){
+  return {t: terrain || 'void', w:false, d:false, doOpen:false, p:null, ex:false};
+}
+
+function initGrid(w,h,fillTerrain){
+  const cells = new Array(w*h);
+  for(let i=0;i<w*h;i++) cells[i] = newCell(fillTerrain || 'void');
+  state.gridW = w; state.gridH = h; state.cells = cells;
+}
+function idx(x,y){ return y*state.gridW + x; }
+function inBounds(x,y){ return x>=0 && y>=0 && x<state.gridW && y<state.gridH; }
+function cellAt(x,y){ return inBounds(x,y) ? state.cells[idx(x,y)] : null; }
+
+initGrid(34,24,'void');
+
+/* ============================================================
+   UNDO STACK
+============================================================ */
+const undoStack = [];
+const MAX_UNDO = 25;
+function snapshot(){
+  return JSON.stringify({
+    gridW: state.gridW, gridH: state.gridH,
+    cells: state.cells, tokens: state.tokens, nextTokenId: state.nextTokenId
+  });
+}
+function pushUndo(){
+  undoStack.push(snapshot());
+  if(undoStack.length > MAX_UNDO) undoStack.shift();
+}
+function undo(){
+  if(undoStack.length === 0) return;
+  const snap = JSON.parse(undoStack.pop());
+  state.gridW = snap.gridW; state.gridH = snap.gridH;
+  state.cells = snap.cells; state.tokens = snap.tokens; state.nextTokenId = snap.nextTokenId;
+  state.selectedTokenId = null;
+  invalidateVisibility();
+  renderInspector();
+  renderTokenList();
+  requestRender();
+  setStatus();
+}
+
+/* ============================================================
+   LINE OF SIGHT / LIGHTING ENGINE
+============================================================ */
+function isOpaque(cell){
+  if(!cell) return true;
+  if(cell.w) return true;
+  if(cell.d && !cell.doOpen) return true;
+  if(cell.p && PROP_MAP[cell.p] && PROP_MAP[cell.p].blocksLOS) return true;
+  return false;
+}
+
+function bresenhamLine(x0,y0,x1,y1){
+  const pts = [];
+  let dx = Math.abs(x1-x0), dy = -Math.abs(y1-y0);
+  let sx = x0 < x1 ? 1 : -1, sy = y0 < y1 ? 1 : -1;
+  let err = dx + dy, x = x0, y = y0;
+  while(true){
+    pts.push([x,y]);
+    if(x === x1 && y === y1) break;
+    const e2 = 2*err;
+    if(e2 >= dy){ err += dy; x += sx; }
+    if(e2 <= dx){ err += dx; y += sy; }
+  }
+  return pts;
+}
+
+// Returns a Set of "x,y" strings visible from (ox,oy) within radius (in cells), respecting opaque cells.
+function computeVisibility(ox, oy, radius){
+  const visible = new Set();
+  if(radius <= 0){ visible.add(ox+','+oy); return visible; }
+  const r2 = (radius+0.4)*(radius+0.4);
+  const minX = Math.max(0, ox-radius), maxX = Math.min(state.gridW-1, ox+radius);
+  const minY = Math.max(0, oy-radius), maxY = Math.min(state.gridH-1, oy+radius);
+  for(let ty=minY; ty<=maxY; ty++){
+    for(let tx=minX; tx<=maxX; tx++){
+      const dx = tx-ox, dy = ty-oy;
+      if(dx*dx + dy*dy > r2) continue;
+      const line = bresenhamLine(ox,oy,tx,ty);
+      let blocked = false;
+      for(let i=1;i<line.length-1;i++){
+        if(isOpaque(cellAt(line[i][0], line[i][1]))){ blocked = true; break; }
+      }
+      if(!blocked) visible.add(tx+','+ty);
+    }
+  }
+  return visible;
+}
+
+let visCache = null; // {litCells:Set, sightCells:Set (normal, needs light), darkCells:Set (darkvision, ignores light)}
+function invalidateVisibility(){ visCache = null; }
+
+function computeSceneVisibility(){
+  if(visCache) return visCache;
+  const litCells = new Set();
+  const sightCells = new Set();
+  const darkCells = new Set();
+
+  // Light sources: prop-based (torches etc placed on the map)
+  for(let y=0;y<state.gridH;y++){
+    for(let x=0;x<state.gridW;x++){
+      const c = cellAt(x,y);
+      if(c && c.p){
+        const pd = PROP_MAP[c.p];
+        if(pd && pd.light){
+          const vis = computeVisibility(x,y,pd.radius||4);
+          vis.forEach(v=>litCells.add(v));
+        }
+      }
+    }
+  }
+  // Token-based light & vision
+  state.tokens.forEach(tok=>{
+    if(tok.hasLight){
+      const vis = computeVisibility(tok.x, tok.y, tok.lightRadius||4);
+      vis.forEach(v=>litCells.add(v));
+    }
+    const visionR = tok.vision||0;
+    const vis = computeVisibility(tok.x, tok.y, visionR);
+    if(tok.darkvision){
+      vis.forEach(v=>darkCells.add(v));
+    } else {
+      vis.forEach(v=>sightCells.add(v));
+    }
+  });
+
+  visCache = {litCells, sightCells, darkCells};
+  return visCache;
+}
+
+// Determine render-visibility state for a cell in current view mode.
+// Returns 'visible' | 'memory' | 'hidden'
+function cellFogState(x,y){
+  if(!state.playerView && !state.dmPreview) return 'visible';
+  const scene = computeSceneVisibility();
+  const key = x+','+y;
+  const seenNow = (scene.sightCells.has(key) && scene.litCells.has(key)) || scene.darkCells.has(key);
+  if(seenNow){
+    cellAt(x,y).ex = true;
+    return 'visible';
+  }
+  if(cellAt(x,y).ex) return 'memory';
+  return 'hidden';
+}
+
+/* ============================================================
+   DUNGEON GENERATOR
+============================================================ */
+function generateDungeon(opts){
+  const w = opts.w, h = opts.h;
+  initGrid(w, h, 'void');
+  const rng = makeRng(opts.seed);
+  const themeFloor = {stone:'stone', cave:'cave', crypt:'stone', wood:'wood'}[opts.theme] || 'stone';
+
+  // fill all walls
+  for(let i=0;i<state.cells.length;i++){ state.cells[i] = newCell('void'); state.cells[i].w = true; }
+
+  const rooms = [];
+  let attempts = 0;
+  while(rooms.length < opts.roomCount && attempts < opts.roomCount*40){
+    attempts++;
+    const rw = opts.roomMin + Math.floor(rng()*(opts.roomMax-opts.roomMin+1));
+    const rh = opts.roomMin + Math.floor(rng()*(opts.roomMax-opts.roomMin+1));
+    const rx = 1 + Math.floor(rng()*(w-rw-2));
+    const ry = 1 + Math.floor(rng()*(h-rh-2));
+    if(rx<1||ry<1||rx+rw>=w-1||ry+rh>=h-1) continue;
+    const candidate = {x:rx,y:ry,w:rw,h:rh};
+    let overlaps = false;
+    for(const r of rooms){
+      if(candidate.x-1 < r.x+r.w+1 && candidate.x+candidate.w+1 > r.x-1 &&
+         candidate.y-1 < r.y+r.h+1 && candidate.y+candidate.h+1 > r.y-1){ overlaps = true; break; }
+    }
+    if(overlaps) continue;
+    rooms.push(candidate);
+  }
+
+  function carveFloor(x,y){
+    const c = cellAt(x,y);
+    if(!c) return;
+    c.w = false; c.t = themeFloor;
+  }
+  function carveRect(rx,ry,rw,rh){
+    for(let y=ry;y<ry+rh;y++) for(let x=rx;x<rx+rw;x++) carveFloor(x,y);
+  }
+  rooms.forEach(r=>carveRect(r.x,r.y,r.w,r.h));
+
+  // connect rooms sequentially (simple + reliable) with L-shaped corridors
+  function carveCorridorH(x0,x1,y){
+    const a=Math.min(x0,x1), b=Math.max(x0,x1);
+    for(let x=a;x<=b;x++) carveFloor(x,y);
+  }
+  function carveCorridorV(y0,y1,x){
+    const a=Math.min(y0,y1), b=Math.max(y0,y1);
+    for(let y=a;y<=b;y++) carveFloor(x,y);
+  }
+  for(let i=1;i<rooms.length;i++){
+    const a = rooms[i-1], b = rooms[i];
+    const ax = Math.floor(a.x+a.w/2), ay = Math.floor(a.y+a.h/2);
+    const bx = Math.floor(b.x+b.w/2), by = Math.floor(b.y+b.h/2);
+    if(rng() < 0.5){ carveCorridorH(ax,bx,ay); carveCorridorV(ay,by,bx); }
+    else { carveCorridorV(ay,by,ax); carveCorridorH(ax,bx,by); }
+  }
+  // extra loop connections for interest
+  const extraLinks = Math.max(0, Math.floor(rooms.length/4));
+  for(let i=0;i<extraLinks;i++){
+    const a = rooms[Math.floor(rng()*rooms.length)];
+    const b = rooms[Math.floor(rng()*rooms.length)];
+    if(a===b) continue;
+    const ax = Math.floor(a.x+a.w/2), ay = Math.floor(a.y+a.h/2);
+    const bx = Math.floor(b.x+b.w/2), by = Math.floor(b.y+b.h/2);
+    if(rng() < 0.5){ carveCorridorH(ax,bx,ay); carveCorridorV(ay,by,bx); }
+    else { carveCorridorV(ay,by,ax); carveCorridorH(ax,bx,by); }
+  }
+
+  // doors: where a floor cell adjacent to corridor meets a room's boundary wall-turned-floor edge
+  rooms.forEach(r=>{
+    const edgeCells = [];
+    for(let x=r.x;x<r.x+r.w;x++){ edgeCells.push([x,r.y-1]); edgeCells.push([x,r.y+r.h]); }
+    for(let y=r.y;y<r.y+r.h;y++){ edgeCells.push([r.x-1,y]); edgeCells.push([r.x+r.w,y]); }
+    edgeCells.forEach(([ex,ey])=>{
+      const c = cellAt(ex,ey);
+      if(c && !c.w && c.t !== 'void' && rng() < 0.35){
+        c.d = true; c.doOpen = false; c.w = false;
+      }
+    });
+  });
+
+  // pillars in large rooms
+  rooms.forEach(r=>{
+    if(r.w*r.h < 20) return;
+    for(let y=r.y+1;y<r.y+r.h-1;y+=2){
+      for(let x=r.x+1;x<r.x+r.w-1;x+=2){
+        if(rng() < opts.pillarDensity){
+          const c = cellAt(x,y);
+          if(c && !c.w){ c.p = 'pillar'; }
+        }
+      }
+    }
+  });
+
+  // torches near room entrances / along corridors
+  for(let y=0;y<h;y++){
+    for(let x=0;x<w;x++){
+      const c = cellAt(x,y);
+      if(!c || c.w || c.p) continue;
+      if(c.t === 'void') continue;
+      if(rng() < opts.torchDensity*0.06){
+        c.p = 'torch';
+      }
+    }
+  }
+
+  // stairs
+  function placeStairs(propId, count){
+    let placed = 0, tries = 0;
+    while(placed < count && tries < 500){
+      tries++;
+      const r = rooms[Math.floor(rng()*rooms.length)];
+      const x = r.x + 1 + Math.floor(rng()*Math.max(1,r.w-2));
+      const y = r.y + 1 + Math.floor(rng()*Math.max(1,r.h-2));
+      const c = cellAt(x,y);
+      if(c && !c.w && !c.p){ c.p = propId; placed++; }
+    }
+  }
+  placeStairs('stairs_up', opts.stairsUp);
+  placeStairs('stairs_down', opts.stairsDown);
+
+  invalidateVisibility();
+}
+
+/* ============================================================
+   CANVAS RENDERING
+============================================================ */
+const canvas = document.getElementById('mapCanvas');
+const ctx = canvas.getContext('2d');
+
+function effCell(){ return Math.round(state.baseCell * state.zoom); }
+
+function resizeCanvas(){
+  const cs = effCell();
+  canvas.width = state.gridW * cs;
+  canvas.height = state.gridH * cs;
+}
+
+function render(){
+  resizeCanvas();
+  const cs = effCell();
+  ctx.imageSmoothingEnabled = false;
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+
+  for(let y=0;y<state.gridH;y++){
+    for(let x=0;x<state.gridW;x++){
+      const c = cellAt(x,y);
+      const fog = cellFogState(x,y);
+      const px = x*cs, py = y*cs;
+
+      if(fog === 'hidden'){
+        ctx.fillStyle = '#050403';
+        ctx.fillRect(px,py,cs,cs);
+        continue;
+      }
+
+      // terrain
+      const terr = TERRAIN_MAP[c.t] || TERRAIN_MAP.void;
+      ctx.fillStyle = terr.color;
+      ctx.fillRect(px,py,cs,cs);
+      // subtle checker texture
+      if((x+y)%2===0){ ctx.fillStyle='rgba(0,0,0,0.045)'; ctx.fillRect(px,py,cs,cs); }
+
+      // wall
+      if(c.w){
+        ctx.fillStyle = '#332a20';
+        ctx.fillRect(px,py,cs,cs);
+        ctx.strokeStyle = 'rgba(0,0,0,.35)';
+        ctx.lineWidth = 1;
+        ctx.strokeRect(px+1,py+1,cs-2,cs-2);
+        ctx.fillStyle = 'rgba(255,255,255,.04)';
+        ctx.fillRect(px,py,cs,3);
+      }
+      // door
+      if(c.d){
+        ctx.fillStyle = c.doOpen ? '#4a3a24' : '#6b4a2c';
+        ctx.fillRect(px+cs*0.12, py+cs*0.12, cs*0.76, cs*0.76);
+        ctx.strokeStyle = '#2c1e10'; ctx.lineWidth = 2;
+        ctx.strokeRect(px+cs*0.12, py+cs*0.12, cs*0.76, cs*0.76);
+        if(!c.doOpen){
+          ctx.fillStyle = '#d8b25a';
+          ctx.beginPath(); ctx.arc(px+cs*0.78, py+cs*0.5, Math.max(1.5,cs*0.05), 0, 7); ctx.fill();
+        }
+      }
+      // prop icon
+      if(c.p){
+        const pd = PROP_MAP[c.p];
+        ctx.font = Math.round(cs*0.62)+'px sans-serif';
+        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.fillText(pd.icon, px+cs/2, py+cs*0.56);
+      }
+
+      // fog overlay (memory)
+      if(fog === 'memory'){
+        ctx.fillStyle = 'rgba(5,4,3,0.72)';
+        ctx.fillRect(px,py,cs,cs);
+      }
+
+      // grid line
+      ctx.strokeStyle = 'rgba(0,0,0,.18)';
+      ctx.lineWidth = 1;
+      ctx.strokeRect(px+0.5,py+0.5,cs-1,cs-1);
+    }
+  }
+
+  // tokens (only draw where visible or memory==false constraint: draw only if fog visible, or DM full view)
+  state.tokens.forEach(tok=>{
+    const fog = cellFogState(tok.x, tok.y);
+    if((state.playerView || state.dmPreview) && fog !== 'visible') return;
+    const cx = tok.x*cs + cs/2, cy = tok.y*cs + cs/2;
+    const rad = Math.max(6, (cs/2) * Math.min(tok.size,1) * 0.86 + (tok.size>1? cs*0.14*(tok.size-1):0));
+    ctx.beginPath();
+    ctx.arc(cx,cy,rad,0,Math.PI*2);
+    ctx.fillStyle = tok.color;
+    ctx.fill();
+    ctx.lineWidth = tok.id===state.selectedTokenId ? 3 : 1.5;
+    ctx.strokeStyle = tok.id===state.selectedTokenId ? '#f4b94a' : 'rgba(0,0,0,.55)';
+    ctx.stroke();
+    ctx.font = 'bold '+Math.round(cs*0.34)+'px sans-serif';
+    ctx.fillStyle = '#100d09';
+    ctx.textAlign='center'; ctx.textBaseline='middle';
+    const initials = (tok.name||'?').trim().split(/\s+/).map(s=>s[0]).slice(0,2).join('').toUpperCase() || '?';
+    ctx.fillText(initials, cx, cy+1);
+    if(tok.hasLight){
+      ctx.font = Math.round(cs*0.32)+'px sans-serif';
+      ctx.fillText('\u{1F525}', cx+rad*0.72, cy-rad*0.72);
+    }
+  });
+}
+
+let renderQueued = false;
+function requestRender(){
+  if(renderQueued) return;
+  renderQueued = true;
+  requestAnimationFrame(()=>{ renderQueued=false; render(); });
+}
+
+/* ============================================================
+   UI: TERRAIN / PROP SWATCHES
+============================================================ */
+const terrainSwatchesEl = document.getElementById('terrainSwatches');
+TERRAINS.forEach(t=>{
+  const el = document.createElement('div');
+  el.className = 'swatch'; el.dataset.terrain = t.id;
+  el.innerHTML = '<div class="chip" style="background:'+t.color+'"></div>'+t.name;
+  el.addEventListener('click', ()=>{
+    state.selectedTerrain = t.id; state.tool='terrain';
+    document.querySelectorAll('#terrainSwatches .swatch').forEach(s=>s.classList.remove('selected'));
+    el.classList.add('selected');
+    setStatus();
+  });
+  terrainSwatchesEl.appendChild(el);
+});
+terrainSwatchesEl.firstChild.classList.add('selected');
+
+const propSwatchesEl = document.getElementById('propSwatches');
+PROPS.forEach(p=>{
+  const el = document.createElement('div');
+  el.className = 'swatch'; el.dataset.prop = p.id;
+  el.innerHTML = '<div class="prop-icon">'+p.icon+'</div>'+p.name;
+  el.addEventListener('click', ()=>{
+    state.selectedProp = p.id; state.tool='prop';
+    document.querySelectorAll('#propSwatches .swatch').forEach(s=>s.classList.remove('selected'));
+    el.classList.add('selected');
+    setStatus();
+  });
+  propSwatchesEl.appendChild(el);
+});
+
+document.querySelectorAll('#panel-walls .swatch').forEach(el=>{
+  el.addEventListener('click', ()=>{
+    state.tool = el.dataset.tool;
+    document.querySelectorAll('#panel-walls .swatch').forEach(s=>s.classList.remove('selected'));
+    el.classList.add('selected');
+    setStatus();
+  });
+});
+
+/* ============================================================
+   TABS
+============================================================ */
+document.querySelectorAll('.tab').forEach(tab=>{
+  tab.addEventListener('click', ()=>{
+    document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+    document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));
+    tab.classList.add('active');
+    document.getElementById('panel-'+tab.dataset.panel).classList.add('active');
+    if(tab.dataset.panel==='tokens') state.tool='select';
+    setStatus();
+  });
+});
+
+/* ============================================================
+   STATUS BAR
+============================================================ */
+const TOOL_LABELS = {terrain:'Terrain Brush', wall:'Wall Brush', door:'Door Brush', prop:'Prop Brush', eraser:'Eraser', select:'Select / Move Token', token:'Place Token', pan:'Pan'};
+function setStatus(){
+  document.getElementById('statTool').textContent = TOOL_LABELS[state.tool] || state.tool;
+  document.getElementById('statSize').textContent = state.gridW+' x '+state.gridH;
+  document.getElementById('statTokens').textContent = state.tokens.length;
+  document.getElementById('statView').textContent = state.playerView ? 'Player' : (state.dmPreview ? 'DM (preview)' : 'DM');
+  document.getElementById('mapW').value = state.gridW;
+  document.getElementById('mapH').value = state.gridH;
+}
+
+/* ============================================================
+   MOUSE / TOOL INTERACTION
+============================================================ */
+let painting = false;
+let paintButton = 0;
+let strokeStarted = false;
+let rectStart = null;
+let draggingToken = null;
+let panDragging = false;
+let panStart = null;
+let scrollStart = null;
+const wrap = document.getElementById('canvas-wrap');
+
+function eventToCell(e){
+  const rect = canvas.getBoundingClientRect();
+  const cs = effCell();
+  const x = Math.floor((e.clientX - rect.left) / cs);
+  const y = Math.floor((e.clientY - rect.top) / cs);
+  return {x,y};
+}
+
+function tokenAtCell(x,y){
+  for(let i=state.tokens.length-1;i>=0;i--){ if(state.tokens[i].x===x && state.tokens[i].y===y) return state.tokens[i]; }
+  return null;
+}
+
+function applyToolAtCell(x,y){
+  if(!inBounds(x,y)) return;
+  const c = cellAt(x,y);
+  switch(state.tool){
+    case 'terrain': c.t = state.selectedTerrain; c.w=false; break;
+    case 'wall': c.w = true; c.d=false; c.p=null; break;
+    case 'door': c.d = true; c.doOpen=false; c.w=false; c.p=null; break;
+    case 'prop': c.p = state.selectedProp; c.w=false; c.d=false; break;
+    case 'eraser': c.w=false; c.d=false; c.p=null; break;
+  }
+}
+
+canvas.addEventListener('mousedown', (e)=>{
+  if(e.button===1 || state.tool==='pan'){
+    panDragging = true; panStart={x:e.clientX,y:e.clientY};
+    scrollStart={l:wrap.scrollLeft,t:wrap.scrollTop};
+    canvas.classList.add('panning');
+    e.preventDefault();
+    return;
+  }
+  const {x,y} = eventToCell(e);
+  if(!inBounds(x,y)) return;
+
+  if(state.tool==='select'){
+    const tok = tokenAtCell(x,y);
+    if(tok){ state.selectedTokenId = tok.id; draggingToken = tok; pushUndo(); renderInspector(); renderTokenList(); requestRender(); }
+    else { state.selectedTokenId=null; renderInspector(); renderTokenList(); requestRender(); }
+    return;
+  }
+  if(state.tool==='token'){
+    const existing = tokenAtCell(x,y);
+    if(existing){ state.selectedTokenId = existing.id; renderInspector(); renderTokenList(); requestRender(); return; }
+    if(state.pendingTokenConfig){
+      pushUndo();
+      const cfg = state.pendingTokenConfig;
+      const tok = {
+        id: state.nextTokenId++,
+        name: cfg.name || ('Token '+state.nextTokenId),
+        type: cfg.type, x, y, color: cfg.color, size: cfg.size,
+        vision: cfg.vision, darkvision: cfg.darkvision,
+        hasLight: cfg.hasLight, lightRadius: cfg.lightRadius
+      };
+      state.tokens.push(tok);
+      state.selectedTokenId = tok.id;
+      invalidateVisibility();
+      renderTokenList(); renderInspector(); requestRender(); setStatus();
+      document.getElementById('armHint').style.display='none';
+    }
+    return;
+  }
+
+  if(state.tool==='door'){
+    const cExisting = cellAt(x,y);
+    if(cExisting.d){ pushUndo(); cExisting.doOpen = !cExisting.doOpen; invalidateVisibility(); requestRender(); return; }
+  }
+
+  painting = true; strokeStarted = false;
+  if(state.brushMode==='rect'){ rectStart = {x,y}; }
+  else {
+    pushUndo(); strokeStarted = true;
+    applyToolAtCell(x,y);
+    invalidateVisibility();
+    requestRender();
+  }
+});
+
+window.addEventListener('mousemove', (e)=>{
+  const hover = document.getElementById('hover-coord');
+  const {x,y} = eventToCell(e);
+  if(inBounds(x,y)) hover.textContent = 'x:'+x+'  y:'+y; else hover.textContent='—';
+
+  if(panDragging){
+    wrap.scrollLeft = scrollStart.l - (e.clientX-panStart.x);
+    wrap.scrollTop = scrollStart.t - (e.clientY-panStart.y);
+    return;
+  }
+  if(draggingToken){
+    if(inBounds(x,y)){ draggingToken.x=x; draggingToken.y=y; invalidateVisibility(); requestRender(); }
+    return;
+  }
+  if(painting && state.brushMode==='single' && inBounds(x,y)){
+    if(!strokeStarted){ strokeStarted = true; }
+    applyToolAtCell(x,y);
+    invalidateVisibility();
+    requestRender();
+  }
+});
+
+window.addEventListener('mouseup', (e)=>{
+  if(panDragging){ panDragging=false; canvas.classList.remove('panning'); return; }
+  if(draggingToken){ draggingToken=null; return; }
+  if(painting && state.brushMode==='rect' && rectStart){
+    const {x,y} = eventToCell(e);
+    if(inBounds(x,y)){
+      pushUndo();
+      const x0=Math.min(rectStart.x,x), x1=Math.max(rectStart.x,x);
+      const y0=Math.min(rectStart.y,y), y1=Math.max(rectStart.y,y);
+      for(let yy=y0; yy<=y1; yy++) for(let xx=x0; xx<=x1; xx++) applyToolAtCell(xx,yy);
+      invalidateVisibility();
+      requestRender();
+    }
+    rectStart = null;
+  }
+  painting = false; strokeStarted = false;
+});
+
+canvas.addEventListener('contextmenu', (e)=>e.preventDefault());
+
+// space to pan temporarily
+let spaceHeld = false;
+window.addEventListener('keydown', (e)=>{
+  if(e.code==='Space' && !spaceHeld){ spaceHeld=true; canvas.classList.add('tool-pan'); }
+  if((e.ctrlKey||e.metaKey) && e.key==='z'){ e.preventDefault(); undo(); }
+});
+window.addEventListener('keyup', (e)=>{
+  if(e.code==='Space'){ spaceHeld=false; if(state.tool!=='pan') canvas.classList.remove('tool-pan'); }
+});
+
+/* ============================================================
+   BRUSH MODE BUTTONS
+============================================================ */
+document.getElementById('brushSingle').addEventListener('click', ()=>{ state.brushMode='single'; toggleBrushBtns(); });
+document.getElementById('brushRect').addEventListener('click', ()=>{ state.brushMode='rect'; toggleBrushBtns(); });
+function toggleBrushBtns(){
+  document.getElementById('brushSingle').classList.toggle('primary', state.brushMode==='single');
+  document.getElementById('brushRect').classList.toggle('primary', state.brushMode==='rect');
+}
+toggleBrushBtns();
+
+/* ============================================================
+   ZOOM
+============================================================ */
+document.getElementById('zoomIn').addEventListener('click', ()=>{ state.zoom=Math.min(2.4, state.zoom+0.15); updateZoomLabel(); requestRender(); });
+document.getElementById('zoomOut').addEventListener('click', ()=>{ state.zoom=Math.max(0.4, state.zoom-0.15); updateZoomLabel(); requestRender(); });
+document.getElementById('zoomReset').addEventListener('click', ()=>{ state.zoom=1; updateZoomLabel(); requestRender(); });
+function updateZoomLabel(){ document.getElementById('zoomReset').textContent = Math.round(state.zoom*100)+'%'; }
+
+document.getElementById('btnPanTool').addEventListener('click', (e)=>{
+  state.tool = state.tool==='pan' ? 'terrain' : 'pan';
+  e.target.classList.toggle('active', state.tool==='pan');
+  canvas.classList.toggle('tool-pan', state.tool==='pan');
+  setStatus();
+});
+
+/* ============================================================
+   VIEW MODE TOGGLES
+============================================================ */
+document.getElementById('btnPlayerView').addEventListener('click', (e)=>{
+  state.playerView = !state.playerView;
+  if(state.playerView) state.dmPreview=false;
+  e.target.classList.toggle('active', state.playerView);
+  document.getElementById('btnDmPreview').classList.remove('active');
+  invalidateVisibility();
+  requestRender(); setStatus();
+});
+document.getElementById('btnDmPreview').addEventListener('click', (e)=>{
+  if(state.playerView) return;
+  state.dmPreview = !state.dmPreview;
+  e.target.classList.toggle('active', state.dmPreview);
+  invalidateVisibility();
+  requestRender(); setStatus();
+});
+
+/* ============================================================
+   TOKEN CREATION FORM
+============================================================ */
+const newTokVision = document.getElementById('newTokVision');
+newTokVision.addEventListener('input', ()=>{ document.getElementById('visionVal').textContent = newTokVision.value; });
+const newTokLightRadius = document.getElementById('newTokLightRadius');
+newTokLightRadius.addEventListener('input', ()=>{ document.getElementById('lightVal').textContent = newTokLightRadius.value; });
+document.getElementById('newTokLight').addEventListener('change', (e)=>{
+  document.getElementById('tokLightRadiusWrap').style.display = e.target.checked ? 'block' : 'none';
+});
+document.getElementById('newTokType').addEventListener('change', (e)=>{
+  document.getElementById('newTokColor').value = TOKEN_TYPE_COLORS[e.target.value] || '#4f8a79';
+});
+
+document.getElementById('btnArmToken').addEventListener('click', ()=>{
+  state.pendingTokenConfig = {
+    name: document.getElementById('newTokName').value.trim(),
+    type: document.getElementById('newTokType').value,
+    color: document.getElementById('newTokColor').value,
+    size: parseFloat(document.getElementById('newTokSize').value),
+    vision: parseInt(document.getElementById('newTokVision').value,10),
+    darkvision: document.getElementById('newTokDark').checked,
+    hasLight: document.getElementById('newTokLight').checked,
+    lightRadius: parseInt(document.getElementById('newTokLightRadius').value,10)
+  };
+  state.tool = 'token';
+  document.getElementById('armHint').style.display='block';
+  setStatus();
+});
+
+function renderTokenList(){
+  const el = document.getElementById('tokenList');
+  el.innerHTML = '';
+  if(state.tokens.length===0){ el.innerHTML = '<div class="empty-note">No tokens placed yet.</div>'; return; }
+  state.tokens.forEach(tok=>{
+    const row = document.createElement('div');
+    row.className = 'token-list-item' + (tok.id===state.selectedTokenId ? ' selected' : '');
+    row.innerHTML = '<div class="tok-dot" style="background:'+tok.color+'"></div><div class="tname">'+escapeHtml(tok.name)+'</div><div class="tdel" title="Delete">&#10005;</div>';
+    row.addEventListener('click', (e)=>{
+      if(e.target.classList.contains('tdel')){
+        pushUndo();
+        state.tokens = state.tokens.filter(t=>t.id!==tok.id);
+        if(state.selectedTokenId===tok.id) state.selectedTokenId=null;
+        invalidateVisibility();
+        renderTokenList(); renderInspector(); requestRender(); setStatus();
+        return;
+      }
+      state.selectedTokenId = tok.id;
+      renderTokenList(); renderInspector(); requestRender();
+    });
+    el.appendChild(row);
+  });
+}
+function escapeHtml(s){ const d=document.createElement('div'); d.textContent=s; return d.innerHTML; }
+
+/* ============================================================
+   INSPECTOR (selected token editor)
+============================================================ */
+function renderInspector(){
+  const body = document.getElementById('inspectorBody');
+  const tok = state.tokens.find(t=>t.id===state.selectedTokenId);
+  if(!tok){ body.innerHTML = '<div class="empty-note">Select a token on the map, or in the Tokens tab, to edit it here.</div>'; return; }
+  body.innerHTML = '';
+  const mk = (labelText, inputHtml)=>{
+    const wrap=document.createElement('div');
+    const lab=document.createElement('label'); lab.className='field'; lab.textContent=labelText;
+    wrap.appendChild(lab); wrap.insertAdjacentHTML('beforeend', inputHtml);
+    return wrap;
+  };
+  body.appendChild(mk('Name', '<input type="text" id="insName" value="'+escapeHtml(tok.name)+'">'));
+  const typeSel = mk('Type', '<select id="insType"><option value="pc">Player Character</option><option value="npc">NPC / Ally</option><option value="monster">Monster / Enemy</option><option value="object">Object / Marker</option></select>');
+  body.appendChild(typeSel);
+  typeSel.querySelector('select').value = tok.type;
+  body.appendChild(mk('Color', '<input type="color" id="insColor" value="'+tok.color+'">'));
+  const sizeSel = mk('Size', '<select id="insSize"><option value="0.6">Tiny</option><option value="1">Small/Medium</option><option value="1.5">Large</option><option value="2">Huge</option><option value="3">Gargantuan</option></select>');
+  body.appendChild(sizeSel);
+  sizeSel.querySelector('select').value = tok.size;
+  body.appendChild(mk('Vision Radius: <span id="insVisionVal">'+tok.vision+'</span> sq', '<input type="range" id="insVision" min="0" max="20" value="'+tok.vision+'">'));
+
+  const dvRow = document.createElement('div'); dvRow.className='check-row';
+  dvRow.innerHTML = '<input type="checkbox" id="insDark" '+(tok.darkvision?'checked':'')+'><label for="insDark">Darkvision</label>';
+  body.appendChild(dvRow);
+
+  const lightRow = document.createElement('div'); lightRow.className='check-row';
+  lightRow.innerHTML = '<input type="checkbox" id="insLight" '+(tok.hasLight?'checked':'')+'><label for="insLight">Carries light</label>';
+  body.appendChild(lightRow);
+
+  const lrWrap = document.createElement('div'); lrWrap.id='insLightRadiusWrap';
+  lrWrap.style.display = tok.hasLight ? 'block':'none';
+  lrWrap.innerHTML = '<label class="field">Light Radius: <span id="insLightVal">'+(tok.lightRadius||4)+'</span> sq</label><input type="range" id="insLightRadius" min="1" max="12" value="'+(tok.lightRadius||4)+'">';
+  body.appendChild(lrWrap);
+
+  const delBtn = document.createElement('button');
+  delBtn.className='btn danger full-btn'; delBtn.textContent='Remove Token'; delBtn.style.marginTop='14px';
+  body.appendChild(delBtn);
+
+  function commit(){
+    tok.name = document.getElementById('insName').value.trim() || tok.name;
+    tok.type = document.getElementById('insType').value;
+    tok.color = document.getElementById('insColor').value;
+    tok.size = parseFloat(document.getElementById('insSize').value);
+    tok.vision = parseInt(document.getElementById('insVision').value,10);
+    tok.darkvision = document.getElementById('insDark').checked;
+    tok.hasLight = document.getElementById('insLight').checked;
+    tok.lightRadius = parseInt(document.getElementById('insLightRadius').value,10) || 4;
+    document.getElementById('insLightRadiusWrap').style.display = tok.hasLight ? 'block':'none';
+    invalidateVisibility();
+    renderTokenList();
+    requestRender();
+  }
+  body.querySelectorAll('input,select').forEach(elm=>{
+    elm.addEventListener('input', ()=>{
+      const vv=document.getElementById('insVisionVal'); if(vv) vv.textContent = document.getElementById('insVision').value;
+      const lv=document.getElementById('insLightVal'); if(lv) lv.textContent = document.getElementById('insLightRadius').value;
+      commit();
+    });
+  });
+  delBtn.addEventListener('click', ()=>{
+    pushUndo();
+    state.tokens = state.tokens.filter(t=>t.id!==tok.id);
+    state.selectedTokenId = null;
+    invalidateVisibility();
+    renderTokenList(); renderInspector(); requestRender(); setStatus();
+  });
+}
+
+/* ============================================================
+   GENERATOR PANEL
+============================================================ */
+document.getElementById('genRooms').addEventListener('input', (e)=>{ document.getElementById('genRoomsVal').textContent = e.target.value; });
+document.getElementById('btnGenerate').addEventListener('click', ()=>{
+  pushUndo();
+  const opts = {
+    w: parseInt(document.getElementById('genW').value,10),
+    h: parseInt(document.getElementById('genH').value,10),
+    theme: document.getElementById('genTheme').value,
+    roomCount: parseInt(document.getElementById('genRooms').value,10),
+    roomMin: parseInt(document.getElementById('genRoomMin').value,10),
+    roomMax: Math.max(parseInt(document.getElementById('genRoomMin').value,10), parseInt(document.getElementById('genRoomMax').value,10)),
+    pillarDensity: parseFloat(document.getElementById('genPillars').value),
+    torchDensity: parseFloat(document.getElementById('genTorches').value),
+    stairsUp: parseInt(document.getElementById('genStairsUp').value,10),
+    stairsDown: parseInt(document.getElementById('genStairsDown').value,10),
+    seed: document.getElementById('genSeed').value.trim()
+  };
+  generateDungeon(opts);
+  state.tokens.forEach(t=>{ t.x=Math.min(t.x,state.gridW-1); t.y=Math.min(t.y,state.gridH-1); });
+  requestRender(); setStatus();
+});
+
+/* ============================================================
+   MAP SETTINGS: resize / clear fog / new map
+============================================================ */
+document.getElementById('btnResize').addEventListener('click', ()=>{
+  const w = parseInt(document.getElementById('mapW').value,10);
+  const h = parseInt(document.getElementById('mapH').value,10);
+  if(!w||!h) return;
+  pushUndo();
+  const oldCells = state.cells, oldW = state.gridW, oldH = state.gridH;
+  const newCells = new Array(w*h);
+  for(let y=0;y<h;y++){
+    for(let x=0;x<w;x++){
+      newCells[y*w+x] = (x<oldW && y<oldH) ? oldCells[y*oldW+x] : newCell('void');
+    }
+  }
+  state.gridW=w; state.gridH=h; state.cells=newCells;
+  state.tokens = state.tokens.filter(t=>t.x<w && t.y<h);
+  invalidateVisibility();
+  requestRender(); setStatus(); renderTokenList();
+});
+
+document.getElementById('btnClearFog').addEventListener('click', ()=>{
+  pushUndo();
+  state.cells.forEach(c=>c.ex=false);
+  invalidateVisibility();
+  requestRender();
+});
+
+document.getElementById('btnNewMap').addEventListener('click', ()=>{
+  if(!confirm('Start a new blank map? Unsaved changes will be lost unless you Save first.')) return;
+  pushUndo();
+  initGrid(34,24,'stone');
+  state.tokens = []; state.selectedTokenId=null;
+  invalidateVisibility();
+  requestRender(); setStatus(); renderTokenList(); renderInspector();
+});
+
+document.getElementById('btnUndo').addEventListener('click', undo);
+
+/* ============================================================
+   SAVE / LOAD (persistent storage) + EXPORT/IMPORT JSON + PNG
+============================================================ */
+function serializeMap(){
+  return {
+    gridW: state.gridW, gridH: state.gridH,
+    cells: state.cells, tokens: state.tokens, nextTokenId: state.nextTokenId,
+    savedAt: Date.now()
+  };
+}
+function loadMapData(data){
+  state.gridW = data.gridW; state.gridH = data.gridH;
+  state.cells = data.cells.map(c=>({t:c.t,w:!!c.w,d:!!c.d,doOpen:!!c.doOpen,p:c.p||null,ex:!!c.ex}));
+  state.tokens = (data.tokens||[]).map(t=>Object.assign({},t));
+  state.nextTokenId = data.nextTokenId || (state.tokens.length+1);
+  state.selectedTokenId = null;
+  invalidateVisibility();
+  requestRender(); setStatus(); renderTokenList(); renderInspector();
+}
+
+const modalSave = document.getElementById('modalSave');
+const modalLoad = document.getElementById('modalLoad');
+document.getElementById('btnSave').addEventListener('click', ()=>{ document.getElementById('saveNameInput').value=''; modalSave.classList.remove('hidden'); });
+document.getElementById('saveCancelBtn').addEventListener('click', ()=>modalSave.classList.add('hidden'));
+document.getElementById('saveConfirmBtn').addEventListener('click', async ()=>{
+  const name = document.getElementById('saveNameInput').value.trim();
+  if(!name){ alert('Please enter a map name.'); return; }
+  try{
+    await window.storage.set('maps:'+name, JSON.stringify(serializeMap()), false);
+    modalSave.classList.add('hidden');
+  }catch(err){
+    console.error(err);
+    alert('Could not save the map. You can still use Export JSON to download a backup.');
+  }
+});
+
+document.getElementById('btnLoad').addEventListener('click', async ()=>{
+  const listEl = document.getElementById('savedMapsList');
+  listEl.innerHTML = '<div class="empty-note">Loading saved maps…</div>';
+  modalLoad.classList.remove('hidden');
+  try{
+    const res = await window.storage.list('maps:', false);
+    const keys = (res && res.keys) || [];
+    if(keys.length===0){ listEl.innerHTML = '<div class="empty-note">No saved maps yet.</div>'; return; }
+    listEl.innerHTML = '';
+    for(const key of keys){
+      const name = key.slice('maps:'.length);
+      const row = document.createElement('div');
+      row.className = 'saved-map-row';
+      row.innerHTML = '<div class="smname">'+escapeHtml(name)+'</div><div class="smbtns"><button class="btn small" data-act="open">Open</button><button class="btn small danger" data-act="del">Delete</button></div>';
+      row.querySelector('[data-act=open]').addEventListener('click', async ()=>{
+        try{
+          const r = await window.storage.get(key, false);
+          if(r && r.value){ loadMapData(JSON.parse(r.value)); modalLoad.classList.add('hidden'); }
+        }catch(err){ alert('Could not load that map.'); }
+      });
+      row.querySelector('[data-act=del]').addEventListener('click', async ()=>{
+        if(!confirm('Delete saved map "'+name+'"?')) return;
+        try{ await window.storage.delete(key, false); row.remove(); }catch(err){ alert('Could not delete.'); }
+      });
+      listEl.appendChild(row);
+    }
+  }catch(err){
+    console.error(err);
+    listEl.innerHTML = '<div class="empty-note">Could not reach map storage.</div>';
+  }
+});
+document.getElementById('loadCancelBtn').addEventListener('click', ()=>modalLoad.classList.add('hidden'));
+
+document.getElementById('btnExportPng').addEventListener('click', ()=>{
+  const wasPreview = state.playerView;
+  render();
+  const link = document.createElement('a');
+  link.download = 'dnd-map.png';
+  link.href = canvas.toDataURL('image/png');
+  link.click();
+});
+document.getElementById('btnExportJson').addEventListener('click', ()=>{
+  const blob = new Blob([JSON.stringify(serializeMap(),null,2)], {type:'application/json'});
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.download = 'dnd-map.json'; link.href = url; link.click();
+  setTimeout(()=>URL.revokeObjectURL(url), 2000);
+});
+document.getElementById('btnImportJson').addEventListener('click', ()=>document.getElementById('fileImport').click());
+document.getElementById('fileImport').addEventListener('change', (e)=>{
+  const file = e.target.files[0];
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = ()=>{
+    try{
+      const data = JSON.parse(reader.result);
+      pushUndo();
+      loadMapData(data);
+    }catch(err){ alert('That file could not be read as a map.'); }
+  };
+  reader.readAsText(file);
+  e.target.value='';
+});
+
+/* ============================================================
+   INIT
+============================================================ */
+initGrid(34,24,'stone');
+updateZoomLabel();
+setStatus();
+renderTokenList();
+renderInspector();
+requestRender();
+
+})();
+</script>
+</body>
+</html>
