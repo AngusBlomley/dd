@@ -50,6 +50,8 @@ Taken from the call. **Must** = needed before the group uses it at the table. **
 
 - R9. Select/Move tool for tokens (B5). While dragging, a faint ghost stays at the starting cell until the token is set down, on both the DM and player screens. Issue #10.
 - R9a. Selecting a door with the Select tool shows Open/Close, and for secret doors Reveal to players. Doors draw as a bar across whichever wall they sit in, horizontal or vertical, and swing aside when open. Issue #9.
+- R9b. The Select tool selects any prop; props drag to another cell (carrying their exit link or treasure description) and can be removed from the inspector. Issue #17.
+- R9c. Chests, treasure, crates and barrels carry a DM-written title and description and a "players can pick it up" flag. Players next to one get a Look button (or tap it) showing the text, and Take when allowed, which removes it from the map and logs who took it in the Session tab. Issue #18.
 - R10. Layer panel with toggles: Terrain, Walls & Doors, Props, Tokens, Light overlay (bright/dim shading), Party vision overlay, Monster vision overlay, Fog memory, DM notes. Each is a visibility toggle; painting always goes to the layer the active tool belongs to.
 - R11. Campaign > Maps structure. Opening a campaign lists its maps; the DM switches the live map at any time.
 - R12. Save is automatic and local (IndexedDB). JSON export/import of a whole campaign or a single map stays as the backup and transfer format.
@@ -65,6 +67,7 @@ Taken from the call. **Must** = needed before the group uses it at the table. **
 - R18a. Generating asks "new map or onto this map"; a new map keeps the current one and its tokens, generating onto the current map replaces its layout. Issues #6, #11.
 - R18b. Every generated map gets an Entry. Placing a player character offers "at the arrival point" or "place freely"; monsters and everything else are always placed freely. Issue #12.
 - R18c. Prefab rooms (tavern, home, shop, smithy, fishing dock, shrine, campsite, inn) stamp onto the map from a Prefabs tab with a hover outline. Issue #15.
+- R18d. Prefabs rotate a quarter turn with R or the Rotate button before stamping. Issue #16.
 
 ### 3.4 Multiplayer session — Should (Prototype 3)
 

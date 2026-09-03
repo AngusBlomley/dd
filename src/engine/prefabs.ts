@@ -92,6 +92,24 @@ export const PREFABS: Prefab[] = [
 ];
 export const PREFAB_MAP: Record<string, Prefab> = Object.fromEntries(PREFABS.map(p => [p.id, p]));
 
+/** The same prefab turned 90° clockwise `quarterTurns` times. */
+export function rotatePrefab(p: Prefab, quarterTurns: number): Prefab {
+  let rows = p.rows;
+  const turns = ((quarterTurns % 4) + 4) % 4;
+  for (let t = 0; t < turns; t++) {
+    const h = rows.length, w = Math.max(...rows.map(r => r.length));
+    const padded = rows.map(r => r.padEnd(w, ' '));
+    const out: string[] = [];
+    for (let x = 0; x < w; x++) {
+      let line = '';
+      for (let y = h - 1; y >= 0; y--) line += padded[y][x];
+      out.push(line);
+    }
+    rows = out;
+  }
+  return { ...p, rows };
+}
+
 export function prefabSize(p: Prefab): { w: number; h: number } {
   return { w: Math.max(...p.rows.map(r => r.length)), h: p.rows.length };
 }

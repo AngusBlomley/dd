@@ -4,7 +4,7 @@
 import { PROP_MAP, TERRAIN_MAP } from '../engine/data';
 import { BRIGHT, DIM, SEEN_DARKVISION, SEEN_DIM, UNSEEN, tokenVisibleToParty } from '../engine/lighting';
 import { mapById, resolveExit } from '../campaign';
-import { PREFAB_MAP, prefabSize } from '../engine/prefabs';
+import { PREFAB_MAP, prefabSize, rotatePrefab } from '../engine/prefabs';
 import { scene, state, type Layers, type Overlays } from '../state';
 
 export const canvas = document.getElementById('mapCanvas') as HTMLCanvasElement;
@@ -59,6 +59,8 @@ export interface PaintOptions {
   exitLabel?: (i: number) => string | null;
   /** Dashed outline of a prefab about to be stamped. */
   preview?: { x: number; y: number; w: number; h: number } | null;
+  /** Where a dragged prop started (drawn as a faint dashed cell). */
+  ghostCell?: { x: number; y: number; icon: string } | null;
 }
 
 type Orient = 'h' | 'v';
@@ -205,6 +207,14 @@ export function paintMap(o: PaintOptions): void {
     c.strokeStyle = '#f4b94a'; c.lineWidth = 3;
     c.strokeRect(o.highlightCell.x * cs + 2, o.highlightCell.y * cs + 2, cs - 4, cs - 4);
   }
+  if (o.ghostCell) {
+    c.save(); c.globalAlpha = 0.4;
+    c.font = Math.round(cs * 0.62) + 'px sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillStyle = '#100d09';
+    c.fillText(o.ghostCell.icon, o.ghostCell.x * cs + cs / 2, o.ghostCell.y * cs + cs * 0.56);
+    c.setLineDash([4, 3]); c.strokeStyle = '#e6d7ab'; c.lineWidth = 1.5;
+    c.strokeRect(o.ghostCell.x * cs + 2, o.ghostCell.y * cs + 2, cs - 4, cs - 4);
+    c.restore();
+  }
   if (o.preview) {
     c.fillStyle = 'rgba(244,185,74,0.16)';
     c.fillRect(o.preview.x * cs, o.preview.y * cs, o.preview.w * cs, o.preview.h * cs);
@@ -288,7 +298,10 @@ export function render(): void {
       }),
     highlightCell: playerSide ? null : state.selectedCell,
     preview: !playerSide && state.tool === 'prefab' && state.hoverCell
-      ? { x: state.hoverCell.x, y: state.hoverCell.y, ...prefabSize(PREFAB_MAP[state.selectedPrefab]) }
+      ? { x: state.hoverCell.x, y: state.hoverCell.y, ...prefabSize(rotatePrefab(PREFAB_MAP[state.selectedPrefab], state.prefabTurns)) }
+      : null,
+    ghostCell: !playerSide && state.dragFrom && state.selectedTokenId === null && state.selectedCell
+      ? { x: state.dragFrom.x, y: state.dragFrom.y, icon: PROP_MAP[cells[state.selectedCell.y * grid.w + state.selectedCell.x].p ?? '']?.icon ?? '' }
       : null,
     exitLabel: playerSide ? undefined : (i) => {
       if (cells[i].p !== 'exit') return null;

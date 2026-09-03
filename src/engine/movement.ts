@@ -78,6 +78,15 @@ export function findPath(grid: Grid, x0: number, y0: number, x1: number, y1: num
 
 export type MoveDenial = 'not-your-token' | 'not-your-turn' | 'blocked' | 'too-far' | 'no-path' | 'out-of-bounds' | 'not-adjacent' | 'not-a-door';
 
+/** Can this token take the loot at (x, y)? Same cell or next to it, and the DM allowed pick-up. */
+export function canTakeLoot(grid: Grid, token: Token, x: number, y: number): { ok: true } | { ok: false; reason: MoveDenial } {
+  const c = cellAt(grid, x, y);
+  if (!c) return { ok: false, reason: 'out-of-bounds' };
+  if (!c.p || !c.loot || !c.loot.pickup) return { ok: false, reason: 'not-a-door' };
+  if (Math.max(Math.abs(token.x - x), Math.abs(token.y - y)) > 1) return { ok: false, reason: 'not-adjacent' };
+  return { ok: true };
+}
+
 /**
  * Can this token open or close the door at (x, y)? It must be next to it
  * (straight or diagonal) and the door must be one the players could know about:

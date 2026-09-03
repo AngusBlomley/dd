@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Token } from '../src/engine/data';
 import { cellAt, createGrid } from '../src/engine/grid';
-import { canOperateDoor, findPath, isPassable, validateMove } from '../src/engine/movement';
+import { canOperateDoor, canTakeLoot, findPath, isPassable, validateMove } from '../src/engine/movement';
 
 function pc(id: number, x: number, y: number, extra: Partial<Token> = {}): Token {
   return { id, name: 'T' + id, type: 'pc', x, y, color: '#fff', size: 1, vision: { radius: 12, darkvision: 0 }, light: null, ...extra };
@@ -142,5 +142,18 @@ describe('canOperateDoor (issue #8)', () => {
     secret.doOpen = true;
     expect(canOperateDoor(g, pc(1, 4, 1), 5, 1)).toEqual({ ok: true });      // revealed by opening
     expect(canOperateDoor(g, pc(1, 2, 1), 9, 9)).toEqual({ ok: false, reason: 'out-of-bounds' });
+  });
+});
+
+describe('canTakeLoot (issue #18)', () => {
+  it('needs an adjacent chest the DM marked as takeable', () => {
+    const g = createGrid(6, 3, 'stone');
+    const chest = cellAt(g, 3, 1)!; chest.p = 'chest'; chest.loot = { title: 'Gold', text: '', pickup: true };
+    const shelf = cellAt(g, 5, 1)!; shelf.p = 'chest'; shelf.loot = { title: 'Nailed down', text: '', pickup: false };
+    expect(canTakeLoot(g, pc(1, 2, 1), 3, 1)).toEqual({ ok: true });
+    expect(canTakeLoot(g, pc(1, 3, 1), 3, 1)).toEqual({ ok: true });     // standing on it
+    expect(canTakeLoot(g, pc(1, 0, 1), 3, 1)).toEqual({ ok: false, reason: 'not-adjacent' });
+    expect(canTakeLoot(g, pc(1, 4, 1), 5, 1)).toEqual({ ok: false, reason: 'not-a-door' });
+    expect(canTakeLoot(g, pc(1, 2, 1), 2, 0)).toEqual({ ok: false, reason: 'not-a-door' });
   });
 });

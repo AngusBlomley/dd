@@ -70,6 +70,21 @@ describe('buildMapView (what players are allowed to know)', () => {
   });
 });
 
+describe('loot in views (issue #18)', () => {
+  it('sends a chest description only when the chest is seen, and diffs it', () => {
+    const m = corridorMap();
+    const chest = cellAt(m.grid, 8, 1)!; chest.p = 'chest'; chest.loot = { title: 'Iron chest', text: 'Locked, smells of oil.', pickup: true };
+    m.tokens.push(token({ id: 1, x: 5, y: 1, light: { bright: 6, dim: 6 } }));
+    const view = buildMapView(m, computeScene(m.grid, m.tokens));
+    expect(view.cells[1 * 30 + 8]!.loot).toEqual({ title: 'Iron chest', text: 'Locked, smells of oil.', canTake: true });
+    const later = buildMapView(m, computeScene(m.grid, m.tokens));
+    expect(diffViews(view, later)).toBeNull();
+    chest.loot.pickup = false;
+    const patch = diffViews(view, buildMapView(m, computeScene(m.grid, m.tokens)))!;
+    expect(Object.keys(patch.cells!)).toEqual([String(1 * 30 + 8)]);
+  });
+});
+
 describe('view diffing', () => {
   function mk(): MapView {
     return { mapId: 'a', name: 'A', w: 3, h: 1, cells: [null, { t: 's', w: false, d: false, doOpen: false, p: null }, null], see: [0, 3, 0], intensity: [0, 255, 0], tokens: [] };

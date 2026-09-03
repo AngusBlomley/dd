@@ -84,6 +84,10 @@ export function renderSessionPanel(): void {
   const who = session.turnPlayerId ? session.players.get(session.turnPlayerId)?.name : null;
   $('turnStatus').textContent = session.moveMode !== 'turn' ? '' : who ? `${who}'s turn · ${(session.movementLeft ?? 0) * 5} ft left` : 'Nobody has the turn. Give it to a player or press Next turn.';
 
+  /* events */
+  const ev = $('eventList');
+  ev.innerHTML = session.events.length ? session.events.map(e => `<div class="event-row">${escapeHtml(e)}</div>`).join('') : '<div class="empty-note">Nothing yet. Doors opened and treasure taken by players show here.</div>';
+
   /* exits */
   const exits = $('exitList');
   exits.innerHTML = '';

@@ -119,6 +119,9 @@ export interface Token {
   hidden?: boolean;                               // DM-only, never shown to players
 }
 
+/** Props that can carry a description and be picked up by players. */
+export const LOOT_PROPS = new Set(['chest', 'treasure', 'crate', 'barrel']);
+
 /** 5e defaults in cells (5 ft each). */
 export const DEFAULT_VISION_RADIUS = 12;   // 60 ft
 export const DARKVISION_OPTIONS = [0, 6, 12, 24]; // none, 30, 60, 120 ft

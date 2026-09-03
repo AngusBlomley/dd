@@ -3,7 +3,8 @@
    render exactly what they are given. */
 
 /** What a player may know about one cell. Secret doors arrive as walls. */
-export interface ViewCell { t: string; w: boolean; d: boolean; doOpen: boolean; p: string | null }
+export interface ViewLoot { title: string; text: string; canTake: boolean }
+export interface ViewCell { t: string; w: boolean; d: boolean; doOpen: boolean; p: string | null; loot?: ViewLoot }
 
 /** What a player may know about a token: no names (initials only), no hidden tokens. */
 export interface ViewToken {
@@ -51,6 +52,7 @@ export type ClientMessage =
   | { type: 'hello'; playerId: string; name: string }
   | { type: 'move'; tokenId: number; x: number; y: number }
   | { type: 'door'; tokenId: number; x: number; y: number }
+  | { type: 'take'; tokenId: number; x: number; y: number }
   | { type: 'ping' };
 
 export type HostMessage =
@@ -59,6 +61,7 @@ export type HostMessage =
   | { type: 'snapshot'; view: MapView }
   | { type: 'patch'; patch: ViewPatch }
   | { type: 'move-denied'; reason: MoveDenial; movementLeft: number | null }
+  | { type: 'notice'; text: string }
   | { type: 'end' }
   | { type: 'pong' };
 
@@ -69,7 +72,10 @@ export const PROTOCOL_VERSION = 1;
 function sameCell(a: ViewCell | null, b: ViewCell | null): boolean {
   if (a === b) return true;
   if (!a || !b) return false;
-  return a.t === b.t && a.w === b.w && a.d === b.d && a.doOpen === b.doOpen && a.p === b.p;
+  if (!(a.t === b.t && a.w === b.w && a.d === b.d && a.doOpen === b.doOpen && a.p === b.p)) return false;
+  if (!a.loot && !b.loot) return true;
+  if (!a.loot || !b.loot) return false;
+  return a.loot.title === b.loot.title && a.loot.text === b.loot.text && a.loot.canTake === b.loot.canTake;
 }
 
 function sameTokens(a: ViewToken[], b: ViewToken[]): boolean {

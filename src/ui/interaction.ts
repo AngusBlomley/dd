@@ -4,7 +4,7 @@
 
 import type { Token } from '../engine/data';
 import { cellAt, inBounds } from '../engine/grid';
-import { PREFAB_MAP, stampPrefab } from '../engine/prefabs';
+import { PREFAB_MAP, rotatePrefab, stampPrefab } from '../engine/prefabs';
 import { canvas, effCell, render, requestRender } from '../render/canvas';
 import { markChanged, popRedo, popUndo, pushUndo, state, type Overlays } from '../state';
 import { $ } from './dom';
@@ -17,7 +17,9 @@ const MIN_ZOOM = 0.35, MAX_ZOOM = 3;
 let painting = false;
 let rectStart: { x: number; y: number } | null = null;
 let draggingToken: Token | null = null;
+let draggingProp: { x: number; y: number } | null = null; // a prop being moved with the Select tool
 let panning = false;
+let propMoveStarted = false;
 let panStart = { x: 0, y: 0 };
 let scrollStart = { l: 0, t: 0 };
 
@@ -126,7 +128,9 @@ function onPointerDown(e: PointerEvent): void {
     const tok = tokenAtCell(x, y);
     if (tok) { draggingToken = tok; pushUndo(); state.dragFrom = { x, y }; }
     const cell = cellAt(state.grid, x, y);
-    state.selectedCell = !tok && cell && (cell.p === 'exit' || cell.p === 'entry' || cell.d) ? { x, y } : null;
+    // any prop or door is selectable; props can be dragged to another cell (issue #17)
+    state.selectedCell = !tok && cell && (cell.p || cell.d) ? { x, y } : null;
+    if (!tok && cell && cell.p) { draggingProp = { x, y }; state.dragFrom = { x, y }; }
     selectToken(tok);
     return;
   }
@@ -138,7 +142,7 @@ function onPointerDown(e: PointerEvent): void {
   }
   if (state.tool === 'prefab') {
     pushUndo();
-    stampPrefab(state.grid, PREFAB_MAP[state.selectedPrefab], x, y);
+    stampPrefab(state.grid, rotatePrefab(PREFAB_MAP[state.selectedPrefab], state.prefabTurns), x, y);
     markChanged();
     requestRender();
     return;
@@ -194,6 +198,23 @@ function onPointerMove(e: PointerEvent): void {
     }
     return;
   }
+  if (draggingProp) {
+    if (inBounds(state.grid, x, y) && (draggingProp.x !== x || draggingProp.y !== y)) {
+      const from = cellAt(state.grid, draggingProp.x, draggingProp.y)!;
+      const to = cellAt(state.grid, x, y)!;
+      if (!to.w && !to.d) {
+        if (!propMoveStarted) { pushUndo(); propMoveStarted = true; }
+        // carry the prop and everything attached to it; whatever was on the target swaps back
+        const swap = { p: to.p, link: to.link ?? null, loot: to.loot ?? null };
+        to.p = from.p; to.link = from.link ?? null; to.loot = from.loot ?? null;
+        from.p = swap.p; from.link = swap.link; from.loot = swap.loot;
+        draggingProp = { x, y };
+        state.selectedCell = { x, y };
+        markChanged(); requestRender();
+      }
+    }
+    return;
+  }
   if (painting && state.brushMode === 'single' && inBounds(state.grid, x, y)) {
     applyToolAtCell(x, y);
     markChanged();
@@ -209,6 +230,7 @@ function onPointerUp(e: PointerEvent): void {
   }
   if (panning) { panning = false; canvas.classList.remove('panning'); return; }
   if (draggingToken) { draggingToken = null; state.dragFrom = null; requestRender(); return; }
+  if (draggingProp) { draggingProp = null; propMoveStarted = false; state.dragFrom = null; renderInspector(); requestRender(); return; }
   if (painting && state.brushMode === 'rect' && rectStart) {
     const { x, y } = clientToCell(e.clientX, e.clientY);
     if (inBounds(state.grid, x, y)) {
@@ -268,6 +290,7 @@ export function initInteraction(): void {
     if (isTypingInField()) return;
     if (e.code === 'Space' && !spaceHeld) { spaceHeld = true; canvas.classList.add('tool-pan'); e.preventDefault(); }
     if (e.key === 'v' || e.key === 'V') setTool('select');
+    if ((e.key === 'r' || e.key === 'R') && state.tool === 'prefab') rotatePrefabTool();
     if (e.key === 'h' || e.key === 'H') setTool(state.tool === 'pan' ? 'terrain' : 'pan');
     if (e.key === '=' || e.key === '+') setZoom(state.zoom * 1.15);
     if (e.key === '-' || e.key === '_') setZoom(state.zoom / 1.15);
@@ -280,6 +303,14 @@ export function initInteraction(): void {
   $('btnRedo').addEventListener('click', redo);
   $('btnSelectTool').addEventListener('click', () => setTool(state.tool === 'select' ? 'terrain' : 'select'));
   $('btnPanTool').addEventListener('click', () => setTool(state.tool === 'pan' ? 'terrain' : 'pan'));
+}
+
+/** Turns the prefab about to be stamped a quarter turn clockwise (issue #16). */
+export function rotatePrefabTool(): void {
+  state.prefabTurns = (state.prefabTurns + 1) % 4;
+  const lab = document.getElementById('prefabTurns');
+  if (lab) lab.textContent = state.prefabTurns * 90 + '°';
+  requestRender();
 }
 
 export function initZoomAndViews(): void {

@@ -3,6 +3,7 @@
 import { PROPS, PROP_CATEGORY_LABELS, TERRAINS, type PropCategory, type Terrain } from '../engine/data';
 import { PREFABS, prefabSize } from '../engine/prefabs';
 import { state, type BrushMode, type ToolId } from '../state';
+import { rotatePrefabTool } from './interaction';
 import { $ } from './dom';
 import { setStatus } from './status';
 
@@ -75,6 +76,8 @@ export function initSwatches(): void {
     });
     prefabEl.appendChild(el);
   }
+
+  $('btnRotatePrefab').addEventListener('click', () => { if (state.tool !== 'prefab') { state.tool = 'prefab'; setStatus(); } rotatePrefabTool(); });
 
   document.querySelectorAll<HTMLElement>('#panel-walls .swatch').forEach(el => {
     el.addEventListener('click', () => {

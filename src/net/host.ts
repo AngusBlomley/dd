@@ -4,7 +4,7 @@
    the only writer: every player move is validated here first. */
 
 import { computeScene, markExplored, UNSEEN, type Scene } from '../engine/lighting';
-import { canOperateDoor, validateMove, type MoveDenial, type MoveRules } from '../engine/movement';
+import { canOperateDoor, canTakeLoot, validateMove, type MoveDenial, type MoveRules } from '../engine/movement';
 import { hasEntry, requestSave, resolveEntry, resolveExit, transferToken } from '../campaign';
 import { markChanged, onChange, pushUndo, scene as activeScene, state } from '../state';
 import type { MapRecord } from '../store/json';
@@ -41,6 +41,8 @@ class HostSession {
   info: SessionInfo | null = null;
   players = new Map<string, PlayerRec>();
   /* movement */
+  /** What players did, newest first, for the Session tab. */
+  events: string[] = [];
   moveMode: MoveMode = 'dm';
   turnPlayerId: string | null = null;
   movementPerTurn = 6;          // cells (30 ft)
@@ -137,6 +139,31 @@ class HostSession {
     }
     if (msg.type === 'move') { this.onMoveRequest(peerId, msg); return; }
     if (msg.type === 'door') { this.onDoorRequest(peerId, msg); return; }
+    if (msg.type === 'take') { this.onTakeRequest(peerId, msg); return; }
+  }
+
+  private logEvent(text: string): void {
+    const t = new Date();
+    this.events.unshift(`${String(t.getHours()).padStart(2, '0')}:${String(t.getMinutes()).padStart(2, '0')} ${text}`);
+    if (this.events.length > 30) this.events.length = 30;
+  }
+
+  /** A player takes a chest or treasure next to their character (issue #18). */
+  private onTakeRequest(peerId: string, msg: { tokenId: number; x: number; y: number }): void {
+    const r = this.requester(peerId, msg.tokenId);
+    if (!r) return;
+    const { p, map, token } = r;
+    const x = msg.x | 0, y = msg.y | 0;
+    const check = canTakeLoot(map.grid, token, x, y);
+    if (!check.ok) { this.deny(peerId, p, check.reason); return; }
+    const cell = map.grid.cells[y * map.grid.w + x];
+    const what = cell.loot?.title || cell.p || 'something';
+    if (map.id === state.mapId) pushUndo();
+    cell.p = null; cell.loot = null; cell.link = null;
+    if (map.id === state.mapId) markChanged(); else { requestSave(); this.scheduleRefresh(); }
+    this.logEvent(`${p.name} (${token.name}) took ${what} on ${map.name}`);
+    this.send({ type: 'notice', text: 'You take ' + what + '.' }, peerId);
+    this.emit();
   }
 
   /** The player, their map and token for a request, or null (after a denial) if not assigned. */

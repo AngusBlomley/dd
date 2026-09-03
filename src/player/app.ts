@@ -132,14 +132,74 @@ function cellAtClient(clientX: number, clientY: number): { x: number; y: number 
   return x >= 0 && y >= 0 && x < view.w && y < view.h ? { x, y } : null;
 }
 
-/** A tap on a door next to your character opens or closes it (issue #8). */
+/** A tap on a door next to your character opens or closes it (issue #8); a tap on a chest looks inside (issue #18). */
 function tapCell(x: number, y: number): void {
   const t = myToken();
   if (!t || !view) return;
   const cell = view.cells[y * view.w + x];
-  if (!cell || !cell.d) return;
+  if (!cell) return;
+  if (cell.loot) { openLoot(x, y); return; }
+  if (!cell.d) return;
   if (Math.max(Math.abs(t.x - x), Math.abs(t.y - y)) > 1) { toast('You need to be next to the door.'); return; }
   transport?.send({ type: 'door', tokenId: t.id, x, y });
+}
+
+/* ---------- treasure: look and take ---------- */
+
+let lootOpen: { x: number; y: number } | null = null;
+
+function nearbyLoot(): { x: number; y: number; title: string }[] {
+  const t = myToken();
+  if (!t || !view) return [];
+  const out = [];
+  for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+    const x = t.x + dx, y = t.y + dy;
+    if (x < 0 || y < 0 || x >= view.w || y >= view.h) continue;
+    const c = view.cells[y * view.w + x];
+    if (c?.loot) out.push({ x, y, title: c.loot.title });
+  }
+  return out;
+}
+
+function renderNearby(): void {
+  const el = $('pNearby');
+  const items = nearbyLoot();
+  el.innerHTML = '';
+  el.hidden = items.length === 0;
+  for (const it of items) {
+    const b = document.createElement('button');
+    b.className = 'btn small'; b.textContent = 'Look: ' + it.title;
+    b.addEventListener('click', () => openLoot(it.x, it.y));
+    el.appendChild(b);
+  }
+  if (lootOpen) {
+    const c = view?.cells[lootOpen.y * view.w + lootOpen.x];
+    if (!c?.loot) closeLoot(); else renderLoot(c.loot);
+  }
+}
+
+function renderLoot(loot: { title: string; text: string; canTake: boolean }): void {
+  const t = myToken();
+  const adjacent = !!(t && lootOpen && Math.max(Math.abs(t.x - lootOpen.x), Math.abs(t.y - lootOpen.y)) <= 1);
+  $('pLootTitle').textContent = loot.title;
+  $('pLootText').textContent = loot.text || 'Nothing more to see.';
+  const take = $<HTMLButtonElement>('pLootTake');
+  take.hidden = !loot.canTake;
+  take.disabled = !adjacent;
+  take.textContent = adjacent ? 'Take it' : 'Move closer to take it';
+}
+
+function openLoot(x: number, y: number): void {
+  const c = view?.cells[y * view.w + x];
+  if (!c?.loot) return;
+  lootOpen = { x, y };
+  $('pLoot').hidden = false;
+  renderLoot(c.loot);
+}
+
+function closeLoot(): void {
+  lootOpen = null;
+  $('pLoot').hidden = true;
 }
 
 function requestMove(x: number, y: number): void {
@@ -222,6 +282,12 @@ function initGestures(): void {
   $('pZoomOut').addEventListener('click', () => setZoom(zoom / 1.2));
   $('pZoomFit').addEventListener('click', () => { fitToScreen(); paint(); });
   $('pFindMe').addEventListener('click', () => { pendingCenter = true; paint(); });
+  $('pLootClose').addEventListener('click', closeLoot);
+  $('pLootTake').addEventListener('click', () => {
+    const t = myToken();
+    if (!t || !lootOpen) return;
+    transport?.send({ type: 'take', tokenId: t.id, x: lootOpen.x, y: lootOpen.y });
+  });
   window.addEventListener('resize', () => { if (view) requestPaint(); });
 }
 
@@ -269,6 +335,7 @@ function updateBanner(): void {
   else { turn.textContent = 'The DM moves the characters'; turn.className = 'pturn'; }
   $('pFindMe').hidden = !assignment || assignment.tokenId === null;
   $('pMapName').textContent = view ? view.name : '';
+  renderNearby();
   if (!assignment?.canMove) { picking = false; moveTarget = null; }
 }
 
@@ -279,8 +346,8 @@ const DENIALS: Record<MoveDenial, string> = {
   'too-far': 'Too far.',
   'no-path': 'No way through that you can see.',
   'out-of-bounds': 'Off the map.',
-  'not-adjacent': 'You need to be next to the door.',
-  'not-a-door': 'There is no door there.',
+  'not-adjacent': 'You need to be next to it.',
+  'not-a-door': 'There is nothing to do there.',
 };
 
 /* ---------- connection ---------- */
@@ -319,6 +386,9 @@ function onHostMessage(raw: unknown): void {
       break;
     case 'move-denied':
       toast(DENIALS[m.reason] + (m.reason === 'too-far' && m.movementLeft !== null ? ' ' + ft(m.movementLeft) + ' left.' : ''));
+      break;
+    case 'notice':
+      toast(m.text);
       break;
     case 'end':
       setStatus('The DM ended the session.', 'warn');

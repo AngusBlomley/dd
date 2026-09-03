@@ -1,7 +1,7 @@
 /* Token creation form, token list, and the inspector for the selected token. */
 
 import {
-  DARKVISION_OPTIONS, DEFAULT_TOKEN_LIGHT, TOKEN_TYPE_COLORS, type Token, type TokenType,
+  DARKVISION_OPTIONS, DEFAULT_TOKEN_LIGHT, LOOT_PROPS, PROP_MAP, TOKEN_TYPE_COLORS, type Token, type TokenType,
 } from '../engine/data';
 import { entriesOf, mapById, resolveExit } from '../campaign';
 import { cellAt } from '../engine/grid';
@@ -267,6 +267,7 @@ function renderCellInspector(body: HTMLElement, x: number, y: number): void {
     return;
   }
   if (cell.d) { renderDoorInspector(body, cell, x, y); return; }
+  if (cell.p && cell.p !== 'exit') { renderPropInspector(body, cell, x, y); return; }
   if (cell.p !== 'exit') { body.innerHTML = ''; return; }
   const link = cell.link ?? null;
   const mapOpts = c.maps.map(m => `<option value="${m.id}"${link && link.mapId === m.id ? ' selected' : ''}>${escapeHtml(m.name)}${m.id === state.mapId ? ' (this map)' : ''}</option>`).join('');
@@ -327,4 +328,40 @@ function renderDoorInspector(body: HTMLElement, cell: import('../engine/grid').C
   document.getElementById('doorReveal')?.addEventListener('click', () => { pushUndo(); cell.secret = false; done(); });
   document.getElementById('doorToggle')?.addEventListener('click', () => { pushUndo(); cell.doOpen = !cell.doOpen; done(); });
   document.getElementById('doorHide')?.addEventListener('click', () => { pushUndo(); cell.secret = true; cell.doOpen = false; done(); });
+}
+
+/* ---------- prop inspector, with the treasure editor (issues #17, #18) ---------- */
+
+function renderPropInspector(body: HTMLElement, cell: import('../engine/grid').Cell, x: number, y: number): void {
+  const pd = cell.p ? PROP_MAP[cell.p] : undefined;
+  const name = pd?.name ?? cell.p ?? 'Prop';
+  const lootable = !!cell.p && LOOT_PROPS.has(cell.p);
+  const notes = [pd?.light ? `Light ${pd.light.bright * 5}/${pd.light.dim * 5} ft` : '', pd?.blocksLOS ? 'Blocks sight' : '', pd?.blocksMove ? 'Blocks movement' : ''].filter(Boolean).join(' · ');
+  body.innerHTML = `
+    <div class="callout-small"><b>${pd?.icon ?? ''} ${escapeHtml(name)}</b> at (${x}, ${y})${cell.p === 'entry' ? '. Characters sent to this map arrive here.' : ''}${notes ? '<div class="map-meta">' + notes + '</div>' : ''}</div>
+    ${lootable ? `
+    <label class="field">What is it?</label>
+    <input type="text" id="lootTitle" placeholder="e.g. Iron-bound chest">
+    <label class="field">Description shown to players when they look</label>
+    <textarea id="lootText" rows="5" placeholder="e.g. Inside: 40 gp, a silver locket and a potion of healing."></textarea>
+    <div class="check-row"><input type="checkbox" id="lootPickup"><label for="lootPickup">Players can pick it up (removes it from the map)</label></div>
+    <div class="hint">Players standing next to it get a Look button with this text. If pick-up is allowed they also get Take, and you see who took it in the Session tab.</div>` : ''}
+    <div class="hint">Drag it with the Select tool to move it.</div>
+    <button class="btn danger full-btn" id="propRemove" style="margin-top:10px">Remove ${escapeHtml(name)}</button>`;
+  if (lootable) {
+    const title = $<HTMLInputElement>('lootTitle'), text = $<HTMLTextAreaElement>('lootText'), pickup = $<HTMLInputElement>('lootPickup');
+    title.value = cell.loot?.title ?? ''; text.value = cell.loot?.text ?? ''; pickup.checked = !!cell.loot?.pickup;
+    const commit = () => {
+      const t = title.value.trim(), d = text.value.trim();
+      cell.loot = t || d ? { title: t || name, text: d, pickup: pickup.checked } : null;
+      markChanged();
+    };
+    title.addEventListener('input', commit); text.addEventListener('input', commit); pickup.addEventListener('change', commit);
+  }
+  $('propRemove').addEventListener('click', () => {
+    pushUndo();
+    cell.p = null; cell.link = null; cell.loot = null;
+    state.selectedCell = null;
+    markChanged(); requestRender(); renderInspector();
+  });
 }

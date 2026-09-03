@@ -13,6 +13,9 @@ export interface CellMemory {
 /** Where an exit prop leads: a cell on another (or the same) map. */
 export interface MapLink { mapId: string; x: number; y: number }
 
+/** DM-written description for a chest or treasure, and whether players may take it. */
+export interface Loot { title: string; text: string; pickup: boolean }
+
 export interface Cell {
   t: string;                // terrain id
   w: boolean;               // wall
@@ -21,6 +24,7 @@ export interface Cell {
   secret: boolean;          // secret door: looks like a wall to players until revealed
   p: string | null;         // prop id
   link?: MapLink | null;    // for p === 'exit': where it leads
+  loot?: Loot | null;       // for chests and treasure: what it is
   mem: CellMemory | null;   // fog memory: null = never seen by the party
 }
 

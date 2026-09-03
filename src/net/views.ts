@@ -9,7 +9,10 @@ import type { MapView, ViewCell, ViewToken } from './protocol';
 /** A cell as the players are allowed to see it: a closed secret door is a wall. */
 export function publicCell(c: Cell | CellMemory): ViewCell {
   if (c.d && c.secret && !c.doOpen) return { t: c.t, w: true, d: false, doOpen: false, p: null };
-  return { t: c.t, w: c.w, d: c.d, doOpen: c.doOpen, p: c.p };
+  const out: ViewCell = { t: c.t, w: c.w, d: c.d, doOpen: c.doOpen, p: c.p };
+  const loot = (c as Cell).loot;
+  if (loot && c.p && (loot.title || loot.text)) out.loot = { title: loot.title, text: loot.text, canTake: loot.pickup };
+  return out;
 }
 
 export function initialsOf(name: string): string {

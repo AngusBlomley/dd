@@ -33,6 +33,7 @@ export interface AppState {
   selectedTerrain: string;
   selectedProp: string;
   selectedPrefab: string;
+  prefabTurns: number;                          // quarter turns clockwise for the prefab tool
   hoverCell: { x: number; y: number } | null;   // for the prefab preview
   dragFrom: { x: number; y: number } | null;    // where a dragged token started (drawn as a ghost)
   tool: ToolId;
@@ -59,6 +60,7 @@ export const state: AppState = {
   selectedTerrain: 'stone',
   selectedProp: 'torch',
   selectedPrefab: 'tavern',
+  prefabTurns: 0,
   hoverCell: null,
   dragFrom: null,
   tool: 'terrain',
