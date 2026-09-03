@@ -1,11 +1,13 @@
 /* Session tab: start / end hosting, show the room code and join link,
-   list players, assign tokens, and send characters through linked exits. */
+   list players, assign tokens, movement mode and turns, and send
+   characters through linked exits. */
 
 import { mapById, transferToken } from '../campaign';
 import { session } from '../net/host';
+import type { MoveMode } from '../net/protocol';
 import { relayAvailable } from '../net/transport';
 import { requestRender } from '../render/canvas';
-import { state } from '../state';
+import { onChange, state } from '../state';
 import { $, escapeHtml } from './dom';
 import { setStatus } from './status';
 import { renderInspector, renderTokenList } from './tokens';
@@ -27,6 +29,10 @@ function pcOptions(selectedMapId: string | null, selectedTokenId: number | null)
   return html;
 }
 
+function panelVisible(): boolean {
+  return $('panel-session').classList.contains('active');
+}
+
 export function renderSessionPanel(): void {
   const info = session.info;
   $('sessionOff').hidden = !!info;
@@ -39,14 +45,16 @@ export function renderSessionPanel(): void {
       : 'Hosting directly from this browser. Keep this tab open; players can join from anywhere with internet.';
   }
 
+  /* players and assignments */
   const list = $('playerList');
   list.innerHTML = '';
   const players = [...session.players.values()];
   if (!players.length) list.innerHTML = '<div class="empty-note">' + (info ? 'No one has joined yet. Share the code or link.' : 'Start a session to let players join.') + '</div>';
   for (const p of players) {
     const row = document.createElement('div');
-    row.className = 'player-row';
-    row.innerHTML = `<div class="player-head"><span class="dot ${p.connected ? 'on' : 'off'}"></span><span class="pname">${escapeHtml(p.name)}</span><span class="tdel" title="Remove player">&#10005;</span></div>
+    const isTurn = session.moveMode === 'turn' && session.turnPlayerId === p.playerId;
+    row.className = 'player-row' + (isTurn ? ' turn' : '');
+    row.innerHTML = `<div class="player-head"><span class="dot ${p.connected ? 'on' : 'off'}"></span><span class="pname">${escapeHtml(p.name)}</span>${isTurn ? `<span class="turn-badge">turn · ${(session.movementLeft ?? 0) * 5} ft left</span>` : ''}<span class="tdel" title="Remove player">&#10005;</span></div>
       <select class="assign"></select>`;
     const sel = row.querySelector('select')!;
     sel.innerHTML = pcOptions(p.mapId, p.tokenId);
@@ -56,10 +64,27 @@ export function renderSessionPanel(): void {
       const [mapId, tid] = v.split(':');
       session.assign(p.playerId, mapId, parseInt(tid, 10));
     });
+    if (session.moveMode === 'turn') {
+      const give = document.createElement('button');
+      give.className = 'btn small' + (isTurn ? ' primary' : '');
+      give.textContent = isTurn ? 'Has the turn' : 'Give turn';
+      give.style.marginTop = '5px';
+      give.disabled = p.tokenId === null;
+      give.addEventListener('click', () => session.giveTurn(p.playerId));
+      row.appendChild(give);
+    }
     row.querySelector('.tdel')!.addEventListener('click', () => { if (confirm(`Remove ${p.name} from the session?`)) session.removePlayer(p.playerId); });
     list.appendChild(row);
   }
 
+  /* movement */
+  $<HTMLSelectElement>('moveMode').value = session.moveMode;
+  $('turnControls').hidden = session.moveMode !== 'turn';
+  $<HTMLInputElement>('movePerTurn').value = String(session.movementPerTurn * 5);
+  const who = session.turnPlayerId ? session.players.get(session.turnPlayerId)?.name : null;
+  $('turnStatus').textContent = session.moveMode !== 'turn' ? '' : who ? `${who}'s turn · ${(session.movementLeft ?? 0) * 5} ft left` : 'Nobody has the turn. Give it to a player or press Next turn.';
+
+  /* exits */
   const exits = $('exitList');
   exits.innerHTML = '';
   const waiting = session.waitingAtExits();
@@ -67,9 +92,9 @@ export function renderSessionPanel(): void {
   for (const w of waiting) {
     const row = document.createElement('div');
     row.className = 'exit-row';
-    const who = w.playerName ? ` (${escapeHtml(w.playerName)})` : '';
+    const whoAt = w.playerName ? ` (${escapeHtml(w.playerName)})` : '';
     const dest = w.to ? escapeHtml(w.to.name) : 'a missing map';
-    row.innerHTML = `<div><b>${escapeHtml(w.tokenName)}</b>${who}<div class="map-meta">${escapeHtml(w.mapName)} → ${dest}</div></div>`;
+    row.innerHTML = `<div><b>${escapeHtml(w.tokenName)}</b>${whoAt}<div class="map-meta">${escapeHtml(w.mapName)} → ${dest}</div></div>`;
     const btn = document.createElement('button');
     btn.className = 'btn small primary'; btn.textContent = 'Send through';
     btn.disabled = !w.to;
@@ -89,6 +114,11 @@ export function sendThrough(mapId: string, tokenId: number): void {
   const newId = transferToken(mapId, tokenId, cell.link.mapId, cell.link.x, cell.link.y);
   if (newId === null) { alert('Could not send the token through. Check the exit link.'); return; }
   session.retarget(mapId, tokenId, cell.link.mapId, newId);
+  refreshDm();
+}
+
+/** Redraws the DM's map and lists after something a player did. */
+function refreshDm(): void {
   renderTokenList(); renderInspector(); requestRender(); setStatus(); renderSessionPanel();
 }
 
@@ -116,6 +146,21 @@ export function initSessionPanel(): void {
     try { await navigator.clipboard.writeText(link.value); $('btnCopyLink').textContent = 'Copied'; setTimeout(() => { $('btnCopyLink').textContent = 'Copy link'; }, 1500); }
     catch { link.select(); }
   });
-  session.onUpdate(renderSessionPanel);
+
+  $('moveMode').addEventListener('change', (e) => session.setMoveMode((e.target as HTMLSelectElement).value as MoveMode));
+  $('movePerTurn').addEventListener('change', (e) => session.setMovementPerTurn(Math.round(parseInt((e.target as HTMLInputElement).value, 10) / 5) || 6));
+  $('btnNextTurn').addEventListener('click', () => session.nextTurn());
+  $('btnEndTurn').addEventListener('click', () => session.giveTurn(null));
+  $('btnResetMove').addEventListener('click', () => session.resetMovement());
+
+  // Player moves and turn changes redraw the DM side; the panel follows the map so
+  // tokens placed after it was opened appear in the dropdowns.
+  session.onUpdate(refreshDm);
+  document.querySelector('.tab[data-panel=session]')!.addEventListener('click', renderSessionPanel);
+  let pending: number | null = null;
+  onChange(() => {
+    if (!panelVisible() || pending !== null) return;
+    pending = window.setTimeout(() => { pending = null; if (document.activeElement?.closest('#panel-session')) return; renderSessionPanel(); }, 250);
+  });
   renderSessionPanel();
 }

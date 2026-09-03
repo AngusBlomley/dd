@@ -33,7 +33,7 @@ const COLORS = {
 };
 
 export interface Look { t: string; w: boolean; d: boolean; doOpen: boolean; secret?: boolean; p: string | null }
-export interface PaintToken { x: number; y: number; size: number; color: string; initials: string; light: boolean; hidden?: boolean; selected?: boolean; mine?: boolean }
+export interface PaintToken { x: number; y: number; size: number; color: string; initials: string; light: boolean; hidden?: boolean; selected?: boolean; mine?: boolean; turn?: boolean }
 
 export interface PaintOptions {
   ctx: CanvasRenderingContext2D;
@@ -165,6 +165,10 @@ export function paintMap(o: PaintOptions): void {
       c.beginPath(); c.arc(cx, cy, rad + 4, 0, Math.PI * 2);
       c.strokeStyle = 'rgba(244,185,74,0.9)'; c.lineWidth = 2; c.setLineDash([4, 3]); c.stroke(); c.setLineDash([]);
     }
+    if (tok.turn) {
+      c.beginPath(); c.arc(cx, cy, rad + 7, 0, Math.PI * 2);
+      c.strokeStyle = 'rgba(244,185,74,0.95)'; c.lineWidth = 3; c.stroke();
+    }
     c.beginPath();
     c.arc(cx, cy, rad, 0, Math.PI * 2);
     c.fillStyle = tok.color;
@@ -211,7 +215,7 @@ export function render(): void {
     overlays: playerSide ? undefined : { flags: state.overlays, light: sc.light, party: sc.party, monsters: sc.monsters, explored: (i) => !!cells[i].mem },
     tokens: state.tokens
       .filter(t => !playerSide || tokenVisibleToParty(t, sc.party, grid.w))
-      .map(t => ({ x: t.x, y: t.y, size: t.size, color: t.color, initials: initialsOf(t.name), light: !!t.light, hidden: t.hidden, selected: t.id === state.selectedTokenId })),
+      .map(t => ({ x: t.x, y: t.y, size: t.size, color: t.color, initials: initialsOf(t.name), light: !!t.light, hidden: t.hidden, selected: t.id === state.selectedTokenId, turn: !playerSide && t.id === state.turnTokenId })),
     highlightCell: playerSide ? null : state.selectedCell,
   });
 }

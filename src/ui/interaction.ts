@@ -110,7 +110,7 @@ function cancelStroke(): void {
 }
 
 function onPointerDown(e: PointerEvent): void {
-  canvas.setPointerCapture(e.pointerId);
+  try { canvas.setPointerCapture(e.pointerId); } catch { /* synthetic or already-released pointer */ }
   pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
 
   if (pointers.size === 2) {

@@ -64,6 +64,7 @@ export class RelayClient implements ClientTransport {
           if (m.type === 'joined') { this.statusCb?.('connected'); if (first) resolve(); }
           else if (m.type === 'no-room') { this.closed = true; this.statusCb?.('no-room'); if (first) reject(new Error('no-room')); }
           else if (m.type === 'host-left') this.statusCb?.('reconnecting', 'The DM has disconnected. Waiting for them to come back…');
+          else if (m.type === 'host-back') this.statusCb?.('connected');
           else if (m.type === 'msg') this.msgCb?.(m.msg);
         };
         ws.onerror = () => { if (first) reject(new Error('Could not reach the host')); };

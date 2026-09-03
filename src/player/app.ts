@@ -1,10 +1,10 @@
-/* The player app: join a room, receive the party's view of the map, render it.
-   Read-only in this phase; Phase 4 adds moving your own token on your turn. */
+/* The player app: join a room, receive the party's view of the map, render it,
+   and (when the DM allows) move your own character. */
 
 import { paintMap } from '../render/canvas';
 import type { Layers } from '../state';
 import { PeerClient } from '../net/peerTransport';
-import { applyPatch, normalizeCode, type Assignment, type HostMessage, type MapView } from '../net/protocol';
+import { applyPatch, normalizeCode, type Assignment, type HostMessage, type MapView, type MoveDenial } from '../net/protocol';
 import { relayAvailable, type ClientStatus, type ClientTransport } from '../net/transport';
 import { RelayClient } from '../net/wsTransport';
 
@@ -18,6 +18,9 @@ let transport: ClientTransport | null = null;
 let zoom = 1;
 let fitted = false;
 let intensityF = new Float32Array(0);
+let pendingCenter = false;        // centre on my token after the next paint
+let moveTarget: { x: number; y: number } | null = null; // cell under a drag / tap-to-move
+let picking = false;              // tapped own token: next tap is the destination
 
 function playerId(): string {
   try {
@@ -40,6 +43,28 @@ function fitToScreen(): void {
   const zw = (wrap.clientWidth - 8) / (view.w * BASE_CELL);
   const zh = (wrap.clientHeight - 8) / (view.h * BASE_CELL);
   zoom = Math.max(0.3, Math.min(2.5, Math.min(zw, zh)));
+}
+
+function myToken() {
+  const id = assignment?.tokenId ?? null;
+  return id === null || !view ? null : view.tokens.find(t => t.id === id) ?? null;
+}
+
+/** Scrolls so my character sits in the middle of the screen. */
+function centerOnMe(): void {
+  const t = myToken();
+  if (!t) return;
+  const cs = cellSize();
+  wrap.scrollLeft = t.x * cs + cs / 2 - wrap.clientWidth / 2;
+  wrap.scrollTop = t.y * cs + cs / 2 - wrap.clientHeight / 2;
+}
+
+function myTokenOffScreen(): boolean {
+  const t = myToken();
+  if (!t) return false;
+  const cs = cellSize();
+  const px = t.x * cs + cs / 2 - wrap.scrollLeft, py = t.y * cs + cs / 2 - wrap.scrollTop;
+  return px < 0 || py < 0 || px > wrap.clientWidth || py > wrap.clientHeight;
 }
 
 let queued = false;
@@ -68,11 +93,13 @@ function paint(): void {
     intensity: intensityF,
     playerSide: true,
     layers: LAYERS,
-    tokens: v.tokens.map(t => ({ x: t.x, y: t.y, size: t.size, color: t.color, initials: t.initials, light: t.light, mine: t.id === mine })),
+    tokens: v.tokens.map(t => ({ x: t.x, y: t.y, size: t.size, color: t.color, initials: t.initials, light: t.light, mine: t.id === mine, selected: picking && t.id === mine })),
+    highlightCell: moveTarget,
   });
+  if (pendingCenter) { pendingCenter = false; centerOnMe(); }
 }
 
-/* ---------- pan and zoom (one finger pans, two pinch, wheel zooms) ---------- */
+/* ---------- pan, zoom and moving your character ---------- */
 
 function setZoom(z: number, clientX?: number, clientY?: number): void {
   const nz = Math.max(0.3, Math.min(3, z));
@@ -89,19 +116,45 @@ function setZoom(z: number, clientX?: number, clientY?: number): void {
   wrap.scrollTop = my * cs - ay;
 }
 
+function cellAtClient(clientX: number, clientY: number): { x: number; y: number } | null {
+  if (!view) return null;
+  const r = canvas.getBoundingClientRect();
+  const cs = cellSize();
+  const x = Math.floor((clientX - r.left) / cs), y = Math.floor((clientY - r.top) / cs);
+  return x >= 0 && y >= 0 && x < view.w && y < view.h ? { x, y } : null;
+}
+
+function requestMove(x: number, y: number): void {
+  const t = myToken();
+  if (!t || !assignment?.canMove) return;
+  if (t.x === x && t.y === y) return;
+  transport?.send({ type: 'move', tokenId: t.id, x, y });
+}
+
 function initGestures(): void {
   const pointers = new Map<number, { x: number; y: number }>();
   let pinch: { dist: number; zoom: number; cx: number; cy: number } | null = null;
   let pan: { x: number; y: number; l: number; t: number } | null = null;
+  let dragging: { startX: number; startY: number; moved: boolean } | null = null;
+
   canvas.addEventListener('pointerdown', (e) => {
-    canvas.setPointerCapture(e.pointerId);
+    try { canvas.setPointerCapture(e.pointerId); } catch { /* synthetic or already-released pointer */ }
     pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
     if (pointers.size === 2) {
       const [a, b] = [...pointers.values()];
       pinch = { dist: Math.hypot(a.x - b.x, a.y - b.y), zoom, cx: (a.x + b.x) / 2, cy: (a.y + b.y) / 2 };
-      pan = null;
+      pan = null; dragging = null; moveTarget = null; requestPaint();
     } else if (pointers.size === 1) {
-      pan = { x: e.clientX, y: e.clientY, l: wrap.scrollLeft, t: wrap.scrollTop };
+      const cell = cellAtClient(e.clientX, e.clientY);
+      const t = myToken();
+      if (assignment?.canMove && t && cell && cell.x === t.x && cell.y === t.y) {
+        dragging = { startX: e.clientX, startY: e.clientY, moved: false };
+      } else if (picking && cell) {
+        picking = false; moveTarget = null; requestPaint();
+        requestMove(cell.x, cell.y);
+      } else {
+        pan = { x: e.clientX, y: e.clientY, l: wrap.scrollLeft, t: wrap.scrollTop };
+      }
     }
     e.preventDefault();
   });
@@ -113,12 +166,26 @@ function initGestures(): void {
       setZoom(pinch.zoom * (Math.hypot(a.x - b.x, a.y - b.y) / pinch.dist), cx, cy);
       wrap.scrollLeft -= cx - pinch.cx; wrap.scrollTop -= cy - pinch.cy;
       pinch.cx = cx; pinch.cy = cy;
+    } else if (dragging) {
+      if (Math.hypot(e.clientX - dragging.startX, e.clientY - dragging.startY) > 6) dragging.moved = true;
+      const cell = cellAtClient(e.clientX, e.clientY);
+      if (dragging.moved && cell && (!moveTarget || moveTarget.x !== cell.x || moveTarget.y !== cell.y)) { moveTarget = cell; requestPaint(); }
     } else if (pan) {
       wrap.scrollLeft = pan.l - (e.clientX - pan.x);
       wrap.scrollTop = pan.t - (e.clientY - pan.y);
     }
   });
-  const up = (e: PointerEvent) => { pointers.delete(e.pointerId); if (pointers.size < 2) pinch = null; if (pointers.size === 0) pan = null; };
+  const up = (e: PointerEvent) => {
+    pointers.delete(e.pointerId);
+    if (pointers.size < 2) pinch = null;
+    if (dragging) {
+      const cell = cellAtClient(e.clientX, e.clientY);
+      if (dragging.moved && cell) requestMove(cell.x, cell.y);
+      else { picking = !picking; }          // a tap on your own token arms tap-to-move
+      dragging = null; moveTarget = null; requestPaint();
+    }
+    if (pointers.size === 0) pan = null;
+  };
   canvas.addEventListener('pointerup', up);
   canvas.addEventListener('pointercancel', up);
   wrap.addEventListener('wheel', (e) => {
@@ -129,10 +196,11 @@ function initGestures(): void {
   $('pZoomIn').addEventListener('click', () => setZoom(zoom * 1.2));
   $('pZoomOut').addEventListener('click', () => setZoom(zoom / 1.2));
   $('pZoomFit').addEventListener('click', () => { fitToScreen(); paint(); });
+  $('pFindMe').addEventListener('click', () => { pendingCenter = true; paint(); });
   window.addEventListener('resize', () => { if (view) requestPaint(); });
 }
 
-/* ---------- status and banners ---------- */
+/* ---------- status, banners, toasts ---------- */
 
 function setStatus(text: string, kind: 'ok' | 'warn' | 'bad' = 'ok'): void {
   const el = $('pStatus');
@@ -140,8 +208,20 @@ function setStatus(text: string, kind: 'ok' | 'warn' | 'bad' = 'ok'): void {
   el.className = 'pstatus ' + kind;
 }
 
+let toastTimer: number | null = null;
+function toast(text: string): void {
+  const el = $('pToast');
+  el.textContent = text;
+  el.hidden = false;
+  if (toastTimer !== null) window.clearTimeout(toastTimer);
+  toastTimer = window.setTimeout(() => { el.hidden = true; }, 1800);
+}
+
+const ft = (cells: number) => cells * 5 + ' ft';
+
 function updateBanner(): void {
   const b = $('pBanner');
+  const turn = $('pTurn');
   if (!assignment || assignment.tokenId === null) {
     b.textContent = 'Waiting for the DM to place you on the map.';
     b.hidden = false;
@@ -151,8 +231,24 @@ function updateBanner(): void {
   } else {
     b.hidden = true;
   }
+  if (!assignment || assignment.tokenId === null) { turn.textContent = ''; turn.className = 'pturn'; }
+  else if (assignment.mode === 'free') { turn.textContent = 'Free movement: drag your character'; turn.className = 'pturn can'; }
+  else if (assignment.mode === 'turn' && assignment.yourTurn) { turn.textContent = 'Your turn · ' + ft(assignment.movementLeft ?? 0) + ' left'; turn.className = 'pturn can'; }
+  else if (assignment.mode === 'turn') { turn.textContent = assignment.turnName ? assignment.turnName + "'s turn" : 'Waiting for the DM to start turns'; turn.className = 'pturn'; }
+  else { turn.textContent = 'The DM moves the characters'; turn.className = 'pturn'; }
+  $('pFindMe').hidden = !assignment || assignment.tokenId === null;
   $('pMapName').textContent = view ? view.name : '';
+  if (!assignment?.canMove) { picking = false; moveTarget = null; }
 }
+
+const DENIALS: Record<MoveDenial, string> = {
+  'not-your-token': 'That is not your character.',
+  'not-your-turn': 'Not your turn.',
+  'blocked': 'You cannot move there.',
+  'too-far': 'Too far.',
+  'no-path': 'No way through that you can see.',
+  'out-of-bounds': 'Off the map.',
+};
 
 /* ---------- connection ---------- */
 
@@ -163,19 +259,32 @@ function onHostMessage(raw: unknown): void {
     case 'welcome':
       setStatus('Connected as ' + m.name);
       break;
-    case 'assign':
+    case 'assign': {
+      const prev = assignment;
       assignment = m.assignment;
+      if (assignment.tokenId !== null && (!prev || prev.tokenId !== assignment.tokenId || prev.mapId !== assignment.mapId)) pendingCenter = true;
       updateBanner();
       requestPaint();
       break;
+    }
     case 'snapshot':
-      if (!view || view.mapId !== m.view.mapId) fitted = false;
+      if (!view || view.mapId !== m.view.mapId) { fitted = false; pendingCenter = true; }
       view = m.view;
       updateBanner();
       requestPaint();
       break;
     case 'patch':
-      if (view && view.mapId === m.patch.mapId) { applyPatch(view, m.patch); updateBanner(); requestPaint(); }
+      if (view && view.mapId === m.patch.mapId) {
+        const before = myToken();
+        applyPatch(view, m.patch);
+        const after = myToken();
+        if (before && after && (before.x !== after.x || before.y !== after.y) && myTokenOffScreen()) pendingCenter = true;
+        updateBanner();
+        requestPaint();
+      }
+      break;
+    case 'move-denied':
+      toast(DENIALS[m.reason] + (m.reason === 'too-far' && m.movementLeft !== null ? ' ' + ft(m.movementLeft) + ' left.' : ''));
       break;
     case 'end':
       setStatus('The DM ended the session.', 'warn');

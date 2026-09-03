@@ -48,6 +48,10 @@ npm run host
 ```
 
 It prints the addresses. The DM opens the first one, players open the join link on the same Wi-Fi.
+
+**Letting players move.** In the Session tab, Movement chooses who can move characters: the DM only,
+one player at a time (turn-based, with a movement budget), or everyone freely. Players drag their own
+character, or tap it and then tap where to go. Every move is checked on the DM's device.
 No internet is needed. The relay holds no game state; the DM's browser is still the source of truth,
 so the DM can be on a tablet while the PC just relays. Forward the port on your router to let
 players join from elsewhere.

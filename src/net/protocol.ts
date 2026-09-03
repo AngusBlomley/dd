@@ -31,15 +31,24 @@ export interface ViewPatch {
   tokens?: ViewToken[];
 }
 
+export type MoveMode = 'dm' | 'turn' | 'free';
+export type MoveDenial = 'not-your-token' | 'not-your-turn' | 'blocked' | 'too-far' | 'no-path' | 'out-of-bounds';
+
 export interface Assignment {
   mapId: string | null;   // map the player's token is on (or the DM's active map when unassigned)
   tokenId: number | null;
   atExit: boolean;        // standing on a linked exit, waiting for the DM
   exitLabel?: string;     // where the exit leads, for the waiting banner
+  mode: MoveMode;
+  canMove: boolean;       // this player may move their token right now
+  yourTurn: boolean;
+  movementLeft: number | null; // cells, in turn mode
+  turnName: string | null;     // whose turn it is, for everyone's top bar
 }
 
 export type ClientMessage =
   | { type: 'hello'; playerId: string; name: string }
+  | { type: 'move'; tokenId: number; x: number; y: number }
   | { type: 'ping' };
 
 export type HostMessage =
@@ -47,6 +56,7 @@ export type HostMessage =
   | { type: 'assign'; assignment: Assignment }
   | { type: 'snapshot'; view: MapView }
   | { type: 'patch'; patch: ViewPatch }
+  | { type: 'move-denied'; reason: MoveDenial; movementLeft: number | null }
   | { type: 'end' }
   | { type: 'pong' };
 

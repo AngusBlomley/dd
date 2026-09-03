@@ -222,6 +222,11 @@ input[type=range]{width:100%;}
 .player-row .dot.on{background:var(--ok);box-shadow:0 0 6px var(--ok);}
 .player-row .dot.off{background:var(--danger);}
 .player-row .tdel{color:var(--danger);cursor:pointer;padding:0 3px;}
+.player-row.turn{border-color:var(--amber);}
+.player-row .turn-badge{font-size:10.5px;color:var(--amber-hi);background:#3a2c17;padding:1px 6px;border-radius:2px;white-space:nowrap;}
+.pturn{font-size:11.5px;color:var(--parchment-dim);}
+.pturn.can{color:var(--amber-hi);font-weight:600;}
+#pToast{position:sticky;left:50%;bottom:14px;transform:translateX(-50%);display:inline-block;background:rgba(20,16,10,.92);border:1px solid var(--amber);color:var(--parchment);padding:7px 14px;border-radius:4px;font-size:13px;pointer-events:none;}
 .exit-row{display:flex;align-items:center;justify-content:space-between;gap:8px;border:1px solid var(--panel-border-lo);border-radius:3px;padding:7px 8px;margin-bottom:6px;background:var(--stone-800);font-size:12.5px;}
 .callout-small{font-size:12px;color:var(--parchment);background:var(--stone-800);border-left:3px solid var(--amber);padding:6px 8px;margin:10px 0 6px;border-radius:0 3px 3px 0;}
 /* ---------- Player app ---------- */
@@ -439,7 +444,24 @@ body.player-mode{overflow:hidden;}
         </div>
         <div class="section-label">Players</div>
         <div id="playerList"></div>
-        <div class="hint">Assign each player one of the player-character tokens. They see the map their character is on; unassigned players see your current map.</div>
+        <div class="hint">Assign each player one of the player-character tokens. They see the map their character is on and their screen centres on it; unassigned players see your current map.</div>
+        <div class="section-label">Movement</div>
+        <select id="moveMode">
+          <option value="dm">DM moves everyone</option>
+          <option value="turn">Turn-based: one player at a time</option>
+          <option value="free">Free: players move their own character</option>
+        </select>
+        <div id="turnControls" hidden>
+          <label class="field">Movement per turn (ft)</label>
+          <input type="number" id="movePerTurn" value="30" min="5" step="5">
+          <div class="hint" id="turnStatus"></div>
+          <div class="row2" style="margin-top:8px">
+            <button class="btn small primary" id="btnNextTurn">Next turn</button>
+            <button class="btn small" id="btnEndTurn">End turn</button>
+          </div>
+          <button class="btn small full-btn" id="btnResetMove">Reset movement</button>
+        </div>
+        <div class="hint">Players can only move where they can see or remember, never through walls, closed doors or other characters. You can still drag anyone at any time.</div>
         <div class="section-label">Waiting at exits</div>
         <div id="exitList"></div>
       </div>
@@ -520,12 +542,14 @@ body.player-mode{overflow:hidden;}
       <span id="pMapName"></span>
       <span class="pstatus ok" id="pStatus">Connecting…</span>
       <span class="spacer"></span>
+      <span class="pturn" id="pTurn"></span>
+      <button class="btn small" id="pFindMe" hidden>Find me</button>
       <button class="btn small" id="pZoomOut">&minus;</button>
       <button class="btn small" id="pZoomFit">Fit</button>
       <button class="btn small" id="pZoomIn">&plus;</button>
       <button class="btn small" id="pLeave">Leave</button>
     </div>
-    <div id="pWrap"><canvas id="playerCanvas"></canvas></div>
+    <div id="pWrap"><canvas id="playerCanvas"></canvas><div id="pToast" hidden></div></div>
     <div id="pBanner" hidden></div>
   </div>
 </div>

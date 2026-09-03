@@ -1,6 +1,6 @@
 # Cartographer's Table — Spec & Roadmap
 
-_Version 0.4 — 3 Sep 2026. Drafted from the prototype-1 HTML and the planning call; updated with the DM's answers. Hosting changed from Supabase to self-hosted. Status: Phases 0 to 3 done._
+_Version 0.4 — 3 Sep 2026. Drafted from the prototype-1 HTML and the planning call; updated with the DM's answers. Hosting changed from Supabase to self-hosted. Status: Phases 0 to 4 done._
 
 ## 1. What we are building
 
@@ -75,8 +75,9 @@ Taken from the call. **Must** = needed before the group uses it at the table. **
 
 ### 3.5 Turns and player movement — Later (Prototype 4)
 
-- R26. The DM marks whose turn it is. Only that player can drag their own token. Movement is blocked by walls, closed doors and blocking props.
-- R27. Optional: movement budget per turn shown as a ring; initiative list.
+- R26. The DM marks whose turn it is. Only that player can drag their own token. Movement is blocked by walls, closed doors, blocking props and other characters, and players can only path through cells they can see or remember.
+- R27. Movement budget per turn (default 30 ft, 5 ft per cell, diagonals cost one cell); the player's top bar shows what is left. A "Next turn" button cycles through assigned players in join order. Three modes: DM moves everyone, turn-based, or free movement.
+- R28. When a player is assigned a character, or their character changes map, their screen centres on it; a Find Me button recentres at any time. The Session tab's character dropdowns always include tokens placed after the tab was opened.
 
 ### 3.6 Backlog — Later / maybe
 
@@ -283,10 +284,12 @@ Phases are ordered by what the DM asked for: lighting first, then editor quality
 - Reconnect and late-join (R23), map switching (R24).
 - **Done when:** a full session runs with players on a mix of phones and laptops and the DM on a tablet, on mobile data, for an evening without anyone refreshing.
 
-### Phase 4 — Turns (small–medium)
+### Phase 4 — Turns (small–medium) — done
 
-- Turn marker set by the DM; the active player drags their own token; engine validates the move (R26).
-- Movement budget ring, initiative list (R27).
+- Movement modes in the Session tab: DM only, turn-based, free (R26).
+- Pure `engine/movement.ts`: passability, 8-way shortest path with the corner rule, `validateMove` covering turn, budget, blockers and visibility; every player move is validated on the DM's device (R26).
+- Turn controls: give turn, next turn, end turn, movement per turn, reset; turn-holder ring on the DM map (R27).
+- Player screen: drag or tap-to-move your own character when allowed, turn and budget in the top bar, denial toasts, auto-centre and Find Me (R28).
 - **Done when:** a combat runs with players moving themselves.
 
 ### Later

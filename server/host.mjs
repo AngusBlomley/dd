@@ -68,9 +68,11 @@ wss.on('connection', (ws) => {
         rooms.set(code, room);
         if (room.timer) { clearTimeout(room.timer); room.timer = null; }
         if (room.host && room.host !== ws) { try { room.host.close(); } catch { /* ignore */ } }
+        const returning = !!msg.code && rooms.has(msg.code);
         room.host = ws; role = 'host';
         send(ws, { type: 'hosted', code });
         for (const id of room.peers.keys()) send(ws, { type: 'peer-joined', peerId: id });
+        if (returning) for (const p of room.peers.values()) send(p, { type: 'host-back' });
         console.log(`[room ${code}] host connected (${room.peers.size} players waiting)`);
       } else if (msg.type === 'join') {
         room = rooms.get(String(msg.code || '').toUpperCase());

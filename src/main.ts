@@ -4,6 +4,7 @@ import { initCampaignModal, initMapsPanel, renderMapList } from './ui/campaignPa
 import { initInteraction, initZoomAndViews } from './ui/interaction';
 import { initGeneratorPanel, initLayersPanel, initMapSettings } from './ui/panels';
 import { setSaveStatus, setStatus } from './ui/status';
+import { session } from './net/host';
 import { initSessionPanel } from './ui/sessionPanel';
 import { initBrushButtons, initSwatches, initTabs } from './ui/swatches';
 import { initTokenForm, renderInspector, renderTokenList } from './ui/tokens';
@@ -25,6 +26,7 @@ async function main(): Promise<void> {
   onSaveStatus(setSaveStatus);
   await bootCampaign();
   initAutosave();
+  void session.resume();
 
   renderMapList();
   setStatus();
