@@ -18,15 +18,17 @@ export interface Prefab {
     T  table   B  bed    b  barrel   C  chest   c  crate     A  anvil/forge   K  cauldron
     S  bookshelf         L  lantern  t  torch   f  campfire  ^  tent   a  altar   n  candle
     ~  deep water        -  shallow water       o  boat      r  rope   W  well
+    I  iron bars (block movement, not sight)    w  weapon rack   %  web   x  bones
     E  entry (arrival)   X  exit
 */
 /* Floor terrain per prefab; prefabs without one (the campsite) keep the terrain they are placed on. */
-const FLOOR: Record<string, string | undefined> = { tavern: 'wood', home: 'wood', shop: 'wood', dock: 'wood', shrine: 'tile', smithy: 'stone', inn: 'wood' };
+const FLOOR: Record<string, string | undefined> = { tavern: 'wood', home: 'wood', shop: 'wood', dock: 'wood', shrine: 'tile', smithy: 'stone', inn: 'wood', cell: 'stone', prison: 'stone', den: 'cave', mess: 'stone', armory: 'stone' };
 
 const PROP_LEGEND: Record<string, string> = {
   T: 'table', B: 'bed', b: 'barrel', C: 'chest', c: 'crate', A: 'anvil', K: 'cauldron', S: 'bookshelf',
   L: 'lantern', t: 'torch', f: 'campfire', '^': 'tent', a: 'altar', n: 'candle', o: 'boat', r: 'rope', W: 'well',
   E: 'entry', X: 'exit',
+  I: 'bars', w: 'weaponrack', '%': 'web', x: 'bones',
 };
 
 export const PREFABS: Prefab[] = [
@@ -88,6 +90,49 @@ export const PREFABS: Prefab[] = [
     '#...+..T..#',
     '#C..#.....#',
     '###########',
+  ] },
+  { id: 'cell', name: 'Cell', icon: '\u{1F512}', rows: [
+    '#####',
+    '#B.x#',
+    '#...#',
+    '#I+I#',
+  ] },
+  { id: 'prison', name: 'Prison block', icon: '\u{26D3}\u{FE0F}', rows: [
+    '#############',
+    '#..B#..B#x.B#',
+    '#...#...#...#',
+    '#I+I#I+I#I+I#',
+    '#...........#',
+    '#t...T.....t#',
+    '######+######',
+  ] },
+  { id: 'den', name: 'Spider den', icon: '\u{1F578}\u{FE0F}', rows: [
+    ',,,###,,,,,,',
+    ',,#%..#%,,,,',
+    ',#..x..%#,,,',
+    '#.%....x.#,,',
+    '#..x.%....#,',
+    ',#...x..%#,,',
+    ',,#%...#,,,,',
+    ',,,,%.,,,,,,',
+  ] },
+  { id: 'mess', name: 'Mess hall', icon: '\u{1F372}', rows: [
+    '###########',
+    '#L.......L#',
+    '#.TTT.TTT.#',
+    '#.........#',
+    '#.TTT.TTT.#',
+    '#K......bb#',
+    '####+######',
+  ] },
+  { id: 'armory', name: 'Armoury', icon: '\u{1F6E1}\u{FE0F}', rows: [
+    '#########',
+    '#wwwww.c#',
+    '#.......#',
+    '#w..A..w#',
+    '#.......#',
+    '#wwww..c#',
+    '####+####',
   ] },
 ];
 export const PREFAB_MAP: Record<string, Prefab> = Object.fromEntries(PREFABS.map(p => [p.id, p]));

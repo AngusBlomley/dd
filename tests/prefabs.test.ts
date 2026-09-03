@@ -6,7 +6,7 @@ import { PREFABS, PREFAB_MAP, prefabSize, rotatePrefab, stampPrefab } from '../s
 
 describe('prefabs (issue #15)', () => {
   it('every prefab uses only known legend characters and props', () => {
-    const legend = new Set('#.,+=~- TBbCcAKSLtf^anorWEX');
+    const legend = new Set('#.,+=~- TBbCcAKSLtf^anorWEXIw%x');
     for (const p of PREFABS) {
       for (const row of p.rows) for (const ch of row) expect(legend.has(ch), `${p.id}: '${ch}'`).toBe(true);
       const g = createGrid(20, 20, 'stone');
@@ -39,6 +39,40 @@ describe('prefabs (issue #15)', () => {
     stampPrefab(g, PREFAB_MAP.camp, 1, 1);
     expect(cellAt(g, 4, 2)!.p).toBe('campfire');
     expect(cellAt(g, 4, 2)!.t).toBe('grass');
+  });
+});
+
+describe('dungeon prefabs (issue #24)', () => {
+  it('ships a cell, prison block, spider den, mess hall and armoury', () => {
+    for (const id of ['cell', 'prison', 'den', 'mess', 'armory']) expect(PREFAB_MAP[id], id).toBeTruthy();
+    expect(PREFABS.length).toBe(13);
+  });
+
+  it('prison cells are sealed by bars with a barred door, and bars block movement but not sight', () => {
+    const g = createGrid(20, 12, 'stone');
+    stampPrefab(g, PREFAB_MAP.prison, 1, 1);
+    expect(cellAt(g, 2, 4)!.p).toBe('bars');
+    expect(cellAt(g, 3, 4)!.d).toBe(true);
+    expect(PROP_MAP.bars.blocksMove).toBe(true);
+    expect(PROP_MAP.bars.blocksLOS).toBe(false);
+    expect(cellAt(g, 7, 7)!.d).toBe(true); // the block's outer door
+  });
+
+  it('the armoury lines its walls with weapon racks', () => {
+    const g = createGrid(20, 12, 'stone');
+    stampPrefab(g, PREFAB_MAP.armory, 0, 0);
+    expect(cellAt(g, 1, 1)!.p).toBe('weaponrack');
+    expect(PROP_MAP.weaponrack.blocksMove).toBe(true);
+    expect(cellAt(g, 4, 3)!.p).toBe('anvil');
+  });
+
+  it('the spider den keeps the cave terrain open around its webs', () => {
+    const g = createGrid(20, 12, 'cave');
+    stampPrefab(g, PREFAB_MAP.den, 0, 0);
+    const props = g.cells.map(c => c.p).filter(Boolean);
+    expect(props.filter(p => p === 'web').length).toBeGreaterThan(5);
+    expect(props.filter(p => p === 'bones').length).toBeGreaterThan(3);
+    expect(cellAt(g, 0, 0)!.w).toBe(false); // ',' leaves the corner untouched
   });
 });
 

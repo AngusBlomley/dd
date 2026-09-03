@@ -56,6 +56,8 @@ export const PROPS: Prop[] = [
   P('bigshroom',  'Giant Mushroom',   '\u{1F344}', 'blocking', { blocksLOS: true, blocksMove: true }),
   P('bookshelf',  'Bookshelf',        '\u{1F4DA}', 'blocking', { blocksLOS: true, blocksMove: true }),
   P('tent',       'Tent',             '\u{26FA}', 'blocking', { blocksLOS: true, blocksMove: false }),
+  P('bars',       'Iron Bars',        '\u{2AF4}', 'blocking', { blocksLOS: false, blocksMove: true }),
+  P('weaponrack', 'Weapon Rack',      '\u{1F5E1}\u{FE0F}', 'blocking', { blocksLOS: false, blocksMove: true }),
   // Furniture and loot
   P('chest',      'Chest',            '\u{1F4E6}', 'furniture'),
   P('crate',      'Crate',            '\u{1F5C3}\u{FE0F}', 'furniture'),

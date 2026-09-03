@@ -70,6 +70,7 @@ Taken from the call. **Must** = needed before the group uses it at the table. **
 - R18b. Every generated map gets an Entry. Placing a player character offers "at the arrival point" or "place freely"; monsters and everything else are always placed freely. Issue #12.
 - R18c. Prefab rooms (tavern, home, shop, smithy, fishing dock, shrine, campsite, inn) stamp onto the map from a Prefabs tab with a hover outline. Issue #15.
 - R18d. Prefabs rotate a quarter turn with R or the Rotate button before stamping. Issue #16.
+- R18e. Dungeon prefabs: cell, prison block, spider den, mess hall, armoury; new props Iron Bars (block movement, not sight) and Weapon Rack. Issue #24.
 
 ### 3.4 Multiplayer session — Should (Prototype 3)
 
