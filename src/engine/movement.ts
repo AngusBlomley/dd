@@ -2,7 +2,7 @@
    5e-style: each step, straight or diagonal, costs one cell (5 ft).
    No squeezing diagonally between two blocked orthogonal neighbours. */
 
-import { PROP_MAP, type Token } from './data';
+import { LOOT_PROPS, PROP_MAP, type Token } from './data';
 import { cellAt, type Grid } from './grid';
 
 export const CELL_FEET = 5;
@@ -82,7 +82,7 @@ export type MoveDenial = 'not-your-token' | 'not-your-turn' | 'blocked' | 'too-f
 export function canTakeLoot(grid: Grid, token: Token, x: number, y: number): { ok: true } | { ok: false; reason: MoveDenial } {
   const c = cellAt(grid, x, y);
   if (!c) return { ok: false, reason: 'out-of-bounds' };
-  if (!c.p || !c.loot || !c.loot.pickup) return { ok: false, reason: 'not-a-door' };
+  if (!c.p || !LOOT_PROPS.has(c.p) || !c.loot || !c.loot.pickup) return { ok: false, reason: 'not-a-door' };
   if (Math.max(Math.abs(token.x - x), Math.abs(token.y - y)) > 1) return { ok: false, reason: 'not-adjacent' };
   return { ok: true };
 }

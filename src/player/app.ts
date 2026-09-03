@@ -1,6 +1,7 @@
 /* The player app: join a room, receive the party's view of the map, render it,
    and (when the DM allows) move your own character. */
 
+import { PROP_MAP } from '../engine/data';
 import { paintMap } from '../render/canvas';
 import type { Layers } from '../state';
 import { PeerClient } from '../net/peerTransport';
@@ -138,7 +139,7 @@ function tapCell(x: number, y: number): void {
   if (!t || !view) return;
   const cell = view.cells[y * view.w + x];
   if (!cell) return;
-  if (cell.loot) { openLoot(x, y); return; }
+  if (cell.p && view.see[y * view.w + x] > 0) { openLoot(x, y); return; }   // any visible prop: name, facts, DM text (issue #21)
   if (!cell.d) return;
   if (Math.max(Math.abs(t.x - x), Math.abs(t.y - y)) > 1) { toast('You need to be next to the door.'); return; }
   transport?.send({ type: 'door', tokenId: t.id, x, y });
@@ -173,9 +174,19 @@ function renderNearby(): void {
     el.appendChild(b);
   }
   if (lootOpen) {
-    const c = view?.cells[lootOpen.y * view.w + lootOpen.x];
-    if (!c?.loot) closeLoot(); else renderLoot(c.loot);
+    const info = infoFor(lootOpen.x, lootOpen.y);
+    if (!info) closeLoot(); else renderLoot(info);
   }
+}
+
+/** What the sheet shows for a cell: the DM's text if any, else the prop's own name and facts. */
+function infoFor(x: number, y: number): { title: string; text: string; canTake: boolean } | null {
+  const c = view?.cells[y * view.w + x];
+  if (!c?.p) return null;
+  const pd = PROP_MAP[c.p];
+  const facts = pd ? [pd.light ? `Gives light: ${pd.light.bright * 5} ft bright, ${pd.light.dim * 5} ft dim.` : '', pd.blocksLOS ? 'Blocks line of sight.' : '', pd.blocksMove ? 'Cannot be walked through.' : ''].filter(Boolean).join(' ') : '';
+  if (c.loot) return { title: c.loot.title || pd?.name || c.p, text: [c.loot.text, facts].filter(Boolean).join('\n\n'), canTake: c.loot.canTake };
+  return { title: pd?.name ?? c.p, text: facts || 'Nothing more to see.', canTake: false };
 }
 
 function renderLoot(loot: { title: string; text: string; canTake: boolean }): void {
@@ -190,11 +201,11 @@ function renderLoot(loot: { title: string; text: string; canTake: boolean }): vo
 }
 
 function openLoot(x: number, y: number): void {
-  const c = view?.cells[y * view.w + x];
-  if (!c?.loot) return;
+  const info = infoFor(x, y);
+  if (!info) return;
   lootOpen = { x, y };
   $('pLoot').hidden = false;
-  renderLoot(c.loot);
+  renderLoot(info);
 }
 
 function closeLoot(): void {

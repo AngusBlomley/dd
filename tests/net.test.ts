@@ -85,6 +85,16 @@ describe('loot in views (issue #18)', () => {
   });
 });
 
+describe('prop descriptions for players (issue #21)', () => {
+  it('sends the DM text for any prop, but Take only for chest-type props', () => {
+    const m = corridorMap();
+    const statue = cellAt(m.grid, 7, 1)!; statue.p = 'statue'; statue.loot = { title: 'Matron statue', text: 'One hand raised.', pickup: true };
+    m.tokens.push(token({ id: 1, x: 5, y: 1, light: { bright: 6, dim: 6 } }));
+    const view = buildMapView(m, computeScene(m.grid, m.tokens));
+    expect(view.cells[1 * 30 + 7]!.loot).toEqual({ title: 'Matron statue', text: 'One hand raised.', canTake: false });
+  });
+});
+
 describe('view diffing', () => {
   function mk(): MapView {
     return { mapId: 'a', name: 'A', w: 3, h: 1, cells: [null, { t: 's', w: false, d: false, doOpen: false, p: null }, null], see: [0, 3, 0], intensity: [0, 255, 0], tokens: [] };

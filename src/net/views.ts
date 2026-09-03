@@ -1,6 +1,6 @@
 /* Builds the filtered MapView a player device receives. Pure: no DOM, no state. */
 
-import type { Token } from '../engine/data';
+import { LOOT_PROPS, type Token } from '../engine/data';
 import type { Cell, CellMemory, Grid } from '../engine/grid';
 import { isPartyToken, tokenVisibleToParty, UNSEEN, type Scene } from '../engine/lighting';
 import type { MapRecord } from '../store/json';
@@ -11,7 +11,7 @@ export function publicCell(c: Cell | CellMemory): ViewCell {
   if (c.d && c.secret && !c.doOpen) return { t: c.t, w: true, d: false, doOpen: false, p: null };
   const out: ViewCell = { t: c.t, w: c.w, d: c.d, doOpen: c.doOpen, p: c.p };
   const loot = (c as Cell).loot;
-  if (loot && c.p && (loot.title || loot.text)) out.loot = { title: loot.title, text: loot.text, canTake: loot.pickup };
+  if (loot && c.p && (loot.title || loot.text)) out.loot = { title: loot.title, text: loot.text, canTake: loot.pickup && LOOT_PROPS.has(c.p) };
   return out;
 }
 

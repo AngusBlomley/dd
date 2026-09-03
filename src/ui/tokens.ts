@@ -339,24 +339,25 @@ function renderPropInspector(body: HTMLElement, cell: import('../engine/grid').C
   const notes = [pd?.light ? `Light ${pd.light.bright * 5}/${pd.light.dim * 5} ft` : '', pd?.blocksLOS ? 'Blocks sight' : '', pd?.blocksMove ? 'Blocks movement' : ''].filter(Boolean).join(' · ');
   body.innerHTML = `
     <div class="callout-small"><b>${pd?.icon ?? ''} ${escapeHtml(name)}</b> at (${x}, ${y})${cell.p === 'entry' ? '. Characters sent to this map arrive here.' : ''}${notes ? '<div class="map-meta">' + notes + '</div>' : ''}</div>
-    ${lootable ? `
-    <label class="field">What is it?</label>
-    <input type="text" id="lootTitle" placeholder="e.g. Iron-bound chest">
+    <label class="field">Name shown to players</label>
+    <input type="text" id="lootTitle" placeholder="e.g. ${escapeHtml(name)}">
     <label class="field">Description shown to players when they look</label>
-    <textarea id="lootText" rows="5" placeholder="e.g. Inside: 40 gp, a silver locket and a potion of healing."></textarea>
-    <div class="check-row"><input type="checkbox" id="lootPickup"><label for="lootPickup">Players can pick it up (removes it from the map)</label></div>
-    <div class="hint">Players standing next to it get a Look button with this text. If pick-up is allowed they also get Take, and you see who took it in the Session tab.</div>` : ''}
+    <textarea id="lootText" rows="5" placeholder="${lootable ? 'e.g. Inside: 40 gp, a silver locket and a potion of healing.' : 'e.g. A weathered statue of a drow matron, one hand raised.'}"></textarea>
+    ${lootable ? '<div class="check-row"><input type="checkbox" id="lootPickup"><label for="lootPickup">Players can pick it up (removes it from the map)</label></div>' : ''}
+    <div class="hint">Players tap any prop they can see to read its name and this description. ${lootable ? 'If pick-up is allowed, players next to it also get Take, and you see who took it in the Session tab.' : ''}</div>
     <div class="hint">Drag it with the Select tool to move it.</div>
     <button class="btn danger full-btn" id="propRemove" style="margin-top:10px">Remove ${escapeHtml(name)}</button>`;
-  if (lootable) {
-    const title = $<HTMLInputElement>('lootTitle'), text = $<HTMLTextAreaElement>('lootText'), pickup = $<HTMLInputElement>('lootPickup');
-    title.value = cell.loot?.title ?? ''; text.value = cell.loot?.text ?? ''; pickup.checked = !!cell.loot?.pickup;
+  {
+    const title = $<HTMLInputElement>('lootTitle'), text = $<HTMLTextAreaElement>('lootText');
+    const pickup = lootable ? $<HTMLInputElement>('lootPickup') : null;
+    title.value = cell.loot?.title ?? ''; text.value = cell.loot?.text ?? '';
+    if (pickup) pickup.checked = !!cell.loot?.pickup;
     const commit = () => {
       const t = title.value.trim(), d = text.value.trim();
-      cell.loot = t || d ? { title: t || name, text: d, pickup: pickup.checked } : null;
+      cell.loot = t || d ? { title: t || name, text: d, pickup: !!pickup?.checked } : null;
       markChanged();
     };
-    title.addEventListener('input', commit); text.addEventListener('input', commit); pickup.addEventListener('change', commit);
+    title.addEventListener('input', commit); text.addEventListener('input', commit); pickup?.addEventListener('change', commit);
   }
   $('propRemove').addEventListener('click', () => {
     pushUndo();

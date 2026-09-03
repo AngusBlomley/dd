@@ -155,5 +155,7 @@ describe('canTakeLoot (issue #18)', () => {
     expect(canTakeLoot(g, pc(1, 0, 1), 3, 1)).toEqual({ ok: false, reason: 'not-adjacent' });
     expect(canTakeLoot(g, pc(1, 4, 1), 5, 1)).toEqual({ ok: false, reason: 'not-a-door' });
     expect(canTakeLoot(g, pc(1, 2, 1), 2, 0)).toEqual({ ok: false, reason: 'not-a-door' });
+    const statue = cellAt(g, 1, 0)!; statue.p = 'statue'; statue.loot = { title: 'Statue', text: '', pickup: true };
+    expect(canTakeLoot(g, pc(1, 1, 1), 1, 0)).toEqual({ ok: false, reason: 'not-a-door' }); // not something you can carry off
   });
 });
