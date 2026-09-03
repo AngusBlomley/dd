@@ -29,3 +29,25 @@ legacy/           prototype 1, the original single HTML file, kept for reference
 
 Pushing to `main` builds, tests and publishes to GitHub Pages via `.github/workflows/deploy.yml`.
 In the repository settings, set Pages → Source to **GitHub Actions** once.
+
+## Playing together
+
+There are two ways to run a session. Both use the same room code and the same player screen.
+
+**From the website (no install).** Open the site, go to the Session tab and press Start session.
+Your browser hosts the game directly over WebRTC; players open the join link or type the code.
+The public PeerJS broker only introduces devices to each other; map data goes straight from your
+browser to each player. Keep the DM tab open while playing.
+
+**From a PC on your network (like a Minecraft server).** On any computer:
+
+```sh
+git clone https://github.com/AngusBlomley/dd.git && cd dd
+npm install
+npm run host
+```
+
+It prints the addresses. The DM opens the first one, players open the join link on the same Wi-Fi.
+No internet is needed. The relay holds no game state; the DM's browser is still the source of truth,
+so the DM can be on a tablet while the PC just relays. Forward the port on your router to let
+players join from elsewhere.

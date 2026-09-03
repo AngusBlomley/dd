@@ -86,6 +86,8 @@ export const PROPS: Prop[] = [
   P('well',       'Well',             '\u{26F2}', 'dungeon'),
   P('lever',      'Lever',            '\u{1F39A}\u{FE0F}', 'dungeon'),
   P('trap',       'Trap',             '\u{26A0}\u{FE0F}', 'dungeon'),
+  P('exit',       'Exit (to another map)', '\u{29C9}', 'dungeon'),
+  P('entry',      'Entry (arrival point)', '\u{29C8}', 'dungeon'),
   // Markers
   P('marker_a',   'Marker A',         '\u{24B6}', 'marker'),
   P('marker_b',   'Marker B',         '\u{24B7}', 'marker'),

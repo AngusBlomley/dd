@@ -10,6 +10,9 @@ export interface CellMemory {
   secret: boolean;
 }
 
+/** Where an exit prop leads: a cell on another (or the same) map. */
+export interface MapLink { mapId: string; x: number; y: number }
+
 export interface Cell {
   t: string;                // terrain id
   w: boolean;               // wall
@@ -17,6 +20,7 @@ export interface Cell {
   doOpen: boolean;          // door open
   secret: boolean;          // secret door: looks like a wall to players until revealed
   p: string | null;         // prop id
+  link?: MapLink | null;    // for p === 'exit': where it leads
   mem: CellMemory | null;   // fog memory: null = never seen by the party
 }
 

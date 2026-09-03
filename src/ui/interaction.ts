@@ -139,6 +139,8 @@ function onPointerDown(e: PointerEvent): void {
   if (state.tool === 'select') {
     const tok = tokenAtCell(x, y);
     if (tok) { draggingToken = tok; pushUndo(); }
+    const cell = cellAt(state.grid, x, y);
+    state.selectedCell = !tok && cell && (cell.p === 'exit' || cell.p === 'entry') ? { x, y } : null;
     selectToken(tok);
     return;
   }
@@ -257,6 +259,7 @@ export function initInteraction(): void {
     if (mod && (e.key === 'y' || e.key === 'Y')) { e.preventDefault(); redo(); return; }
     if (e.key === 'Escape') {
       if (state.tool === 'token') { cancelPlacing(); state.tool = 'select'; }
+      state.selectedCell = null;
       selectToken(null);
       (document.activeElement as HTMLElement | null)?.blur?.();
       setStatus();

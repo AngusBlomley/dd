@@ -8,15 +8,20 @@
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "host": "vite build && node server/host.mjs",
+    "host:only": "node server/host.mjs"
   },
   "devDependencies": {
     "@types/node": "^26.4.1",
+    "@types/ws": "^8.18.1",
     "typescript": "^7.0.2",
     "vite": "^8.2.2",
     "vitest": "^5.0.0"
   },
   "dependencies": {
-    "idb-keyval": "^6.3.0"
+    "idb-keyval": "^6.3.0",
+    "peerjs": "^1.5.5",
+    "ws": "^8.21.3"
   }
 }

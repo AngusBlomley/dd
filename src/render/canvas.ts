@@ -1,24 +1,15 @@
-/* Canvas 2D renderer. Reads state and the cached scene; never writes to either. */
+/* Canvas 2D renderer. `paintMap` is view-agnostic: the DM view feeds it from
+   state and the cached scene, the player app feeds it from a MapView. */
 
 import { PROP_MAP, TERRAIN_MAP } from '../engine/data';
-import { cellAt, type CellMemory } from '../engine/grid';
-import {
-  BRIGHT, DIM, SEEN_DARKVISION, SEEN_DIM, UNSEEN, tokenVisibleToParty,
-} from '../engine/lighting';
-import { scene, state } from '../state';
+import { BRIGHT, DIM, SEEN_DARKVISION, SEEN_DIM, UNSEEN, tokenVisibleToParty } from '../engine/lighting';
+import { scene, state, type Layers, type Overlays } from '../state';
 
 export const canvas = document.getElementById('mapCanvas') as HTMLCanvasElement;
 const ctx = canvas.getContext('2d')!;
 
 export function effCell(): number {
   return Math.round(state.baseCell * state.zoom);
-}
-
-function resizeCanvas(): void {
-  const cs = effCell();
-  const w = state.grid.w * cs, h = state.grid.h * cs;
-  if (canvas.width !== w) canvas.width = w;
-  if (canvas.height !== h) canvas.height = h;
 }
 
 /* Greyscale terrain colours for darkvision, precomputed once. */
@@ -35,142 +26,194 @@ const COLORS = {
   memoryOverlay: 'rgba(5,4,3,0.72)',
   darkvisionOverlay: 'rgba(70,76,92,0.42)',
   ovDark: 'rgba(0,0,0,0.55)',
-  ovDim: 'rgba(0,0,0,0.25)',
   ovParty: 'rgba(79,138,121,0.38)',
   ovMonster: 'rgba(161,58,45,0.38)',
   ovBoth: 'rgba(200,140,60,0.45)',
   ovMemory: 'rgba(221,155,52,0.22)',
 };
 
-type Look = { t: string; w: boolean; d: boolean; doOpen: boolean; secret: boolean; p: string | null };
+export interface Look { t: string; w: boolean; d: boolean; doOpen: boolean; secret?: boolean; p: string | null }
+export interface PaintToken { x: number; y: number; size: number; color: string; initials: string; light: boolean; hidden?: boolean; selected?: boolean; mine?: boolean }
 
-/** Draws one cell. `playerSide` hides secret doors behind a wall face. */
-function drawCell(x: number, y: number, cs: number, grey: boolean, look: Look, playerSide: boolean): void {
+export interface PaintOptions {
+  ctx: CanvasRenderingContext2D;
+  cs: number;
+  w: number;
+  h: number;
+  /** Live look of cell i, or null when the viewer has no current sight of it. */
+  lookAt: (i: number) => Look | null;
+  /** Remembered look of cell i when out of sight, or null when never seen. */
+  memAt: (i: number) => Look | null;
+  /** SeeLevel per cell on the player side; null in DM view. */
+  see: ArrayLike<number> | null;
+  /** Light falloff 0..1 per cell. */
+  intensity: ArrayLike<number>;
+  playerSide: boolean;
+  layers: Layers;
+  overlays?: { flags: Overlays; light: ArrayLike<number>; party: ArrayLike<number>; monsters: ArrayLike<number>; explored: (i: number) => boolean };
+  tokens: PaintToken[];
+  highlightCell?: { x: number; y: number } | null;
+}
+
+function drawCell(c: CanvasRenderingContext2D, x: number, y: number, cs: number, grey: boolean, look: Look, playerSide: boolean, L: Layers): void {
   const px = x * cs, py = y * cs;
-  const L = state.layers;
   const terr = TERRAIN_MAP[look.t] || TERRAIN_MAP.void;
-  ctx.fillStyle = L.terrain ? (grey ? GREY[terr.id] : terr.color) : '#1a1613';
-  ctx.fillRect(px, py, cs, cs);
-  if (L.terrain && (x + y) % 2 === 0) { ctx.fillStyle = 'rgba(0,0,0,0.045)'; ctx.fillRect(px, py, cs, cs); }
+  c.fillStyle = L.terrain ? (grey ? GREY[terr.id] : terr.color) : '#1a1613';
+  c.fillRect(px, py, cs, cs);
+  if (L.terrain && (x + y) % 2 === 0) { c.fillStyle = 'rgba(0,0,0,0.045)'; c.fillRect(px, py, cs, cs); }
 
   const showAsWall = look.w || (look.d && look.secret && playerSide);
   if (L.walls && showAsWall) {
-    ctx.fillStyle = COLORS.wall;
-    ctx.fillRect(px, py, cs, cs);
-    ctx.strokeStyle = 'rgba(0,0,0,.35)';
-    ctx.lineWidth = 1;
-    ctx.strokeRect(px + 1, py + 1, cs - 2, cs - 2);
-    ctx.fillStyle = 'rgba(255,255,255,.04)';
-    ctx.fillRect(px, py, cs, 3);
+    c.fillStyle = COLORS.wall;
+    c.fillRect(px, py, cs, cs);
+    c.strokeStyle = 'rgba(0,0,0,.35)';
+    c.lineWidth = 1;
+    c.strokeRect(px + 1, py + 1, cs - 2, cs - 2);
+    c.fillStyle = 'rgba(255,255,255,.04)';
+    c.fillRect(px, py, cs, 3);
   } else if (L.walls && look.d) {
-    ctx.fillStyle = look.doOpen ? '#4a3a24' : '#6b4a2c';
-    ctx.fillRect(px + cs * 0.12, py + cs * 0.12, cs * 0.76, cs * 0.76);
-    ctx.strokeStyle = look.secret ? '#e6d7ab' : '#2c1e10'; ctx.lineWidth = 2;
-    if (look.secret) ctx.setLineDash([3, 3]);
-    ctx.strokeRect(px + cs * 0.12, py + cs * 0.12, cs * 0.76, cs * 0.76);
-    ctx.setLineDash([]);
+    c.fillStyle = look.doOpen ? '#4a3a24' : '#6b4a2c';
+    c.fillRect(px + cs * 0.12, py + cs * 0.12, cs * 0.76, cs * 0.76);
+    c.strokeStyle = look.secret ? '#e6d7ab' : '#2c1e10'; c.lineWidth = 2;
+    if (look.secret) c.setLineDash([3, 3]);
+    c.strokeRect(px + cs * 0.12, py + cs * 0.12, cs * 0.76, cs * 0.76);
+    c.setLineDash([]);
     if (!look.doOpen) {
-      ctx.fillStyle = '#d8b25a';
-      ctx.beginPath(); ctx.arc(px + cs * 0.78, py + cs * 0.5, Math.max(1.5, cs * 0.05), 0, 7); ctx.fill();
+      c.fillStyle = '#d8b25a';
+      c.beginPath(); c.arc(px + cs * 0.78, py + cs * 0.5, Math.max(1.5, cs * 0.05), 0, 7); c.fill();
     }
   }
   if (L.props && look.p) {
     const pd = PROP_MAP[look.p];
     if (pd) {
-      ctx.font = Math.round(cs * 0.62) + 'px sans-serif';
-      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-      ctx.fillText(pd.icon, px + cs / 2, py + cs * 0.56);
+      if (pd.id === 'exit' || pd.id === 'entry') {
+        c.fillStyle = pd.id === 'exit' ? 'rgba(221,155,52,0.35)' : 'rgba(79,138,121,0.35)';
+        c.fillRect(px + 2, py + 2, cs - 4, cs - 4);
+      }
+      c.font = Math.round(cs * 0.62) + 'px sans-serif';
+      c.textAlign = 'center'; c.textBaseline = 'middle';
+      c.fillStyle = '#100d09';
+      c.fillText(pd.icon, px + cs / 2, py + cs * 0.56);
     }
   }
 }
 
-function overlay(x: number, y: number, cs: number, color: string): void {
-  ctx.fillStyle = color;
-  ctx.fillRect(x * cs, y * cs, cs, cs);
+function overlay(c: CanvasRenderingContext2D, x: number, y: number, cs: number, color: string): void {
+  c.fillStyle = color;
+  c.fillRect(x * cs, y * cs, cs, cs);
 }
 
-export function render(): void {
-  resizeCanvas();
-  const cs = effCell();
-  const grid = state.grid;
-  const sc = scene();
-  const playerSide = state.playerView || state.dmPreview;
-  ctx.imageSmoothingEnabled = false;
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
+export function paintMap(o: PaintOptions): void {
+  const { ctx: c, cs, w, h } = o;
+  c.imageSmoothingEnabled = false;
+  c.clearRect(0, 0, w * cs, h * cs);
 
-  for (let y = 0; y < grid.h; y++) {
-    for (let x = 0; x < grid.w; x++) {
-      const i = y * grid.w + x;
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const i = y * w + x;
       const px = x * cs, py = y * cs;
-      const cell = grid.cells[i];
-
-      if (playerSide) {
-        const see = sc.party[i];
-        if (see === UNSEEN) {
-          const mem: CellMemory | null = cell.mem;
-          if (!mem) {
-            ctx.fillStyle = COLORS.unseen;
-            ctx.fillRect(px, py, cs, cs);
-            continue;
-          }
-          // Memory shows the cell as it was last seen, not as it is now.
-          drawCell(x, y, cs, false, mem, true);
-          overlay(x, y, cs, COLORS.memoryOverlay);
+      if (o.playerSide) {
+        const see = o.see ? o.see[i] : UNSEEN;
+        const look = see > UNSEEN ? o.lookAt(i) : null;
+        if (!look) {
+          const mem = o.memAt(i);
+          if (!mem) { c.fillStyle = COLORS.unseen; c.fillRect(px, py, cs, cs); continue; }
+          drawCell(c, x, y, cs, false, mem, true, o.layers);
+          overlay(c, x, y, cs, COLORS.memoryOverlay);
         } else {
-          drawCell(x, y, cs, see === SEEN_DARKVISION, cell, true);
+          drawCell(c, x, y, cs, see === SEEN_DARKVISION, look, true, o.layers);
           if (see === SEEN_DIM) {
-            // smooth falloff through the dim band: brighter near the source
-            const a = 0.18 + 0.42 * (1 - Math.min(1, sc.intensity[i]));
-            overlay(x, y, cs, `rgba(5,4,3,${a.toFixed(3)})`);
-          } else if (see === SEEN_DARKVISION) overlay(x, y, cs, COLORS.darkvisionOverlay);
+            const a = 0.18 + 0.42 * (1 - Math.min(1, o.intensity[i]));
+            overlay(c, x, y, cs, `rgba(5,4,3,${a.toFixed(3)})`);
+          } else if (see === SEEN_DARKVISION) overlay(c, x, y, cs, COLORS.darkvisionOverlay);
         }
       } else {
-        drawCell(x, y, cs, false, cell, false);
-        if (state.overlays.light) {
-          if (sc.light[i] < DIM) overlay(x, y, cs, COLORS.ovDark);
-          else if (sc.light[i] < BRIGHT) overlay(x, y, cs, `rgba(0,0,0,${(0.1 + 0.35 * (1 - sc.intensity[i])).toFixed(3)})`);
+        const look = o.lookAt(i)!;
+        drawCell(c, x, y, cs, false, look, false, o.layers);
+        const ov = o.overlays;
+        if (ov) {
+          if (ov.flags.light) {
+            if (ov.light[i] < DIM) overlay(c, x, y, cs, COLORS.ovDark);
+            else if (ov.light[i] < BRIGHT) overlay(c, x, y, cs, `rgba(0,0,0,${(0.1 + 0.35 * (1 - o.intensity[i])).toFixed(3)})`);
+          }
+          if (ov.flags.memory && ov.explored(i)) overlay(c, x, y, cs, COLORS.ovMemory);
+          const p = ov.flags.party && ov.party[i] > UNSEEN;
+          const m = ov.flags.monsters && ov.monsters[i] > UNSEEN;
+          if (p && m) overlay(c, x, y, cs, COLORS.ovBoth);
+          else if (p) overlay(c, x, y, cs, COLORS.ovParty);
+          else if (m) overlay(c, x, y, cs, COLORS.ovMonster);
         }
-        if (state.overlays.memory && cell.mem) overlay(x, y, cs, COLORS.ovMemory);
-        const p = state.overlays.party && sc.party[i] > UNSEEN;
-        const m = state.overlays.monsters && sc.monsters[i] > UNSEEN;
-        if (p && m) overlay(x, y, cs, COLORS.ovBoth);
-        else if (p) overlay(x, y, cs, COLORS.ovParty);
-        else if (m) overlay(x, y, cs, COLORS.ovMonster);
       }
-
-      if (state.layers.grid) {
-        ctx.strokeStyle = 'rgba(0,0,0,.18)';
-        ctx.lineWidth = 1;
-        ctx.strokeRect(px + 0.5, py + 0.5, cs - 1, cs - 1);
+      if (o.layers.grid) {
+        c.strokeStyle = 'rgba(0,0,0,.18)';
+        c.lineWidth = 1;
+        c.strokeRect(px + 0.5, py + 0.5, cs - 1, cs - 1);
       }
     }
   }
 
-  if (!state.layers.tokens && !playerSide) return;
-  for (const tok of state.tokens) {
-    if (playerSide && !tokenVisibleToParty(tok, sc.party, grid.w)) continue;
+  if (o.highlightCell) {
+    c.strokeStyle = '#f4b94a'; c.lineWidth = 3;
+    c.strokeRect(o.highlightCell.x * cs + 2, o.highlightCell.y * cs + 2, cs - 4, cs - 4);
+  }
+
+  if (!o.layers.tokens && !o.playerSide) return;
+  for (const tok of o.tokens) {
     const cx = tok.x * cs + cs / 2, cy = tok.y * cs + cs / 2;
     const rad = Math.max(6, (cs / 2) * Math.min(tok.size, 1) * 0.86 + (tok.size > 1 ? cs * 0.14 * (tok.size - 1) : 0));
-    ctx.beginPath();
-    ctx.arc(cx, cy, rad, 0, Math.PI * 2);
-    ctx.fillStyle = tok.color;
-    ctx.fill();
-    const selected = tok.id === state.selectedTokenId;
-    ctx.lineWidth = selected ? 3 : 1.5;
-    ctx.strokeStyle = selected ? '#f4b94a' : 'rgba(0,0,0,.55)';
-    if (tok.hidden && !playerSide) { ctx.setLineDash([3, 3]); ctx.strokeStyle = selected ? '#f4b94a' : '#e6d7ab'; }
-    ctx.stroke();
-    ctx.setLineDash([]);
-    ctx.font = 'bold ' + Math.round(cs * 0.34) + 'px sans-serif';
-    ctx.fillStyle = '#100d09';
-    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    const initials = (tok.name || '?').trim().split(/\s+/).map(s => s[0]).slice(0, 2).join('').toUpperCase() || '?';
-    ctx.fillText(initials, cx, cy + 1);
+    if (tok.mine) {
+      c.beginPath(); c.arc(cx, cy, rad + 4, 0, Math.PI * 2);
+      c.strokeStyle = 'rgba(244,185,74,0.9)'; c.lineWidth = 2; c.setLineDash([4, 3]); c.stroke(); c.setLineDash([]);
+    }
+    c.beginPath();
+    c.arc(cx, cy, rad, 0, Math.PI * 2);
+    c.fillStyle = tok.color;
+    c.fill();
+    c.lineWidth = tok.selected ? 3 : 1.5;
+    c.strokeStyle = tok.selected ? '#f4b94a' : 'rgba(0,0,0,.55)';
+    if (tok.hidden && !o.playerSide) { c.setLineDash([3, 3]); c.strokeStyle = tok.selected ? '#f4b94a' : '#e6d7ab'; }
+    c.stroke();
+    c.setLineDash([]);
+    c.font = 'bold ' + Math.round(cs * 0.34) + 'px sans-serif';
+    c.fillStyle = '#100d09';
+    c.textAlign = 'center'; c.textBaseline = 'middle';
+    c.fillText(tok.initials, cx, cy + 1);
     if (tok.light) {
-      ctx.font = Math.round(cs * 0.32) + 'px sans-serif';
-      ctx.fillText('\u{1F525}', cx + rad * 0.72, cy - rad * 0.72);
+      c.font = Math.round(cs * 0.32) + 'px sans-serif';
+      c.fillText('\u{1F525}', cx + rad * 0.72, cy - rad * 0.72);
     }
   }
+}
+
+export function initialsOf(name: string): string {
+  return (name || '?').trim().split(/\s+/).map(s => s[0]).slice(0, 2).join('').toUpperCase() || '?';
+}
+
+/* ---------- DM view ---------- */
+
+export function render(): void {
+  const cs = effCell();
+  const grid = state.grid;
+  const wpx = grid.w * cs, hpx = grid.h * cs;
+  if (canvas.width !== wpx) canvas.width = wpx;
+  if (canvas.height !== hpx) canvas.height = hpx;
+  const sc = scene();
+  const playerSide = state.playerView || state.dmPreview;
+  const cells = grid.cells;
+  paintMap({
+    ctx, cs, w: grid.w, h: grid.h,
+    lookAt: (i) => cells[i],
+    memAt: (i) => cells[i].mem,
+    see: playerSide ? sc.party : null,
+    intensity: sc.intensity,
+    playerSide,
+    layers: state.layers,
+    overlays: playerSide ? undefined : { flags: state.overlays, light: sc.light, party: sc.party, monsters: sc.monsters, explored: (i) => !!cells[i].mem },
+    tokens: state.tokens
+      .filter(t => !playerSide || tokenVisibleToParty(t, sc.party, grid.w))
+      .map(t => ({ x: t.x, y: t.y, size: t.size, color: t.color, initials: initialsOf(t.name), light: !!t.light, hidden: t.hidden, selected: t.id === state.selectedTokenId })),
+    highlightCell: playerSide ? null : state.selectedCell,
+  });
 }
 
 let renderQueued = false;

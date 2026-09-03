@@ -1,6 +1,6 @@
 # Cartographer's Table — Spec & Roadmap
 
-_Version 0.3 — 3 Sep 2026. Drafted from the prototype-1 HTML and the planning call; updated with the DM's answers to the open questions. Status: Phases 0, 1 and 2 done._
+_Version 0.4 — 3 Sep 2026. Drafted from the prototype-1 HTML and the planning call; updated with the DM's answers. Hosting changed from Supabase to self-hosted. Status: Phases 0 to 3 done._
 
 ## 1. What we are building
 
@@ -70,6 +70,8 @@ Taken from the call. **Must** = needed before the group uses it at the table. **
 - R23. Everything the DM does is reflected on every player device within a second. Late joiners and reconnects get the full current state.
 - R24. Changing the active map on the DM side changes it for everyone.
 - R25. Works with 8 players on any mix of phones and laptops, on the same Wi-Fi or on mobile data.
+- R25a. No hosted backend. The session runs from the DM's own device or from a PC on the group's network, like a Minecraft server. Nothing about a session is stored anywhere but the DM's device.
+- R25b. Linked maps: an Exit prop on one map leads to an Entry on another. A character standing on an exit waits there until the DM sends them through; the player's screen says so. Players see the map their character is on.
 
 ### 3.5 Turns and player movement — Later (Prototype 4)
 
@@ -150,15 +152,15 @@ The single HTML file mixes state, rules, rendering and DOM handlers in one closu
 | Build | Vite | Zero-config, outputs a static folder. |
 | UI | Vanilla DOM + Canvas 2D (Preact is allowed for panels if they get fiddly) | Prototype 1 is already this; no framework tax on phones. |
 | Tests | Vitest | Runs engine tests headless. Lighting acceptance tests live here. |
-| Realtime | Supabase Realtime (Broadcast + Presence) | No server code to write or host. Free tier covers 8 people forever. Room code = channel name. |
+| Realtime | Two transports behind one interface: a LAN relay (`server/host.mjs`, WebSocket, ~150 lines, holds no state) and a browser host (WebRTC via PeerJS; the public broker only performs the handshake) | No hosted backend, no accounts. The relay is the "Minecraft server" mode and works with no internet; the browser host lets a tablet or phone run a session from the website. |
 | Local persistence | IndexedDB via `idb-keyval`, one record per campaign, autosave | Handles campaigns of many maps without the 5 MB localStorage ceiling. |
-| Hosting | GitHub Pages (Vercel is equivalent) | Static files only. Note: Vercel serverless functions cannot hold WebSockets, so Vercel alone would not have solved sync either. |
+| Hosting | GitHub Pages for the site; `npm run host` serves the same build from a PC | Static files only. The LAN host serves the built site itself, because a page loaded over https cannot open a plain WebSocket to a LAN address. |
 
 **Alternatives considered for realtime**
 
-- _PeerJS / WebRTC, DM's device as host, no backend at all._ Closest to the Jackbox model, but WebRTC on phones over mobile data is unreliable, and eight simultaneous peer connections from a tablet is fragile. Kept as a fallback for a fully offline mode.
-- _Cloudflare Workers + Durable Objects (PartyKit)._ Gives an authoritative server and room persistence. Better long-term, but it means writing and deploying server code. Revisit if Supabase limits bite.
-- _Roll a Node WebSocket server on Fly/Railway._ Most work, least benefit at this scale.
+- _Supabase Realtime._ The original plan. Dropped at the DM's request: no hosted service, nothing stored off the DM's device.
+- _Cloudflare Workers + Durable Objects (PartyKit)._ An authoritative server with room persistence. More robust over the internet, but it is a hosted service. Revisit only if the browser host proves unreliable away from the table.
+- _Manual WebRTC signalling (copy-paste offers)._ Zero third parties, but too clunky for eight phones at a table.
 
 ### 5.3 Data model
 
@@ -200,33 +202,35 @@ Typed arrays keep a 100×80 map at about 8 KB per layer and make snapshots cheap
 The DM's device is the single source of truth. Players never write state; in Prototype 4 they send **requests** that the DM's client validates and applies.
 
 ```
-DM tablet                      Supabase channel "room:K7QX"              Player device
-─────────                      ───────────────────────────               ────────────
-Start session ──── join ─────▶ (channel created on first join)
-                                                        ◀──── join + presence {name} ── Enter code + name
-                               ◀──── hello {playerId} ────────────────────────────────
-snapshot(map, players) ──────▶ state:snapshot ────────────────────────────────────────▶ render Player View
-edit a wall / move a token ──▶ state:patch {ops[]} ───────────────────────────────────▶ apply, re-render
-switch map ──────────────────▶ state:snapshot ─────────────────────────────────────────▶
-                               ◀──── token:move-request {tokenId, to} ─────────────── (Prototype 4, own turn only)
-validate, apply ─────────────▶ state:patch ────────────────────────────────────────────▶
+DM device (host)               relay or WebRTC data channel               Player device
+────────────────               ────────────────────────────               ─────────────
+Start session ──────────────▶  room K7QX
+                                                        ◀──── join K7QX ─────────────── Enter code + name
+                               ◀──── hello {playerId, name} ─────────────────────────
+welcome, assign, snapshot ───▶ ────────────────────────────────────────────────────▶ render the party's view
+edit a wall / move a token ──▶ patch {changed cells, see levels, tokens} ───────────▶ apply, re-render
+send a character through ────▶ assign {new map}, snapshot ──────────────────────────▶ show the new map
+                               ◀──── move-request {tokenId, to} ───────────────────── (Prototype 4, own turn only)
 ```
 
-- **Snapshot** = the map minus everything DM-only. The DM's client computes party vision first and sends only the tokens that are currently visible to the party, plus the explored mask. Hidden tokens and DM notes are never sent. A curious player reading the WebSocket traffic therefore learns nothing the party cannot see. Player phones render exactly what they are given; they do not recompute fog.
-- **Patch** = list of small ops (`setCell`, `moveToken`, `setDoor`, `addToken`, …). Patches are sequence-numbered; a player that notices a gap asks for a snapshot.
-- **Presence** gives the DM the live "who's in the room" list for free.
-- Reconnect: player re-joins the channel, sends `hello`, gets a snapshot.
+- **View** = the map as the party may know it. The host computes party vision first and sends, per cell, the live cell if it is currently seen, the memory snapshot if it was seen before, and nothing otherwise, plus a see-level and a light-intensity byte per cell for rendering. Closed secret doors are sent as walls. Hidden tokens and unseen monsters never leave the DM's device. Token names are stripped to initials and colour. Player devices render exactly what they are given; they do not recompute fog, so a curious player reading the traffic learns nothing the party cannot see.
+- **Patch** = only the cells, see-levels and tokens that changed since the last message to that player. A new map or a changed size means a fresh snapshot.
+- **Assignment** tells a player which map and token are theirs and whether they are waiting at an exit. A player's `playerId` lives in their browser, so a reconnect keeps their character.
+- **Reconnect.** The player transport retries with backoff. If the DM's tab goes away, players see "The DM has disconnected" and pick up when it returns; the LAN relay keeps a room open for ten minutes for that.
+- **Prototype 4.** Players send move _requests_. The DM's client checks it is their turn and the path is passable, applies the move, and broadcasts the patch.
 
 ### 5.5 Repository layout
 
 ```
 dd/
-├── index.html                 DM app and player app share one bundle; route by #/dm or #/join/K7QX
+├── index.html                 DM app and player app share one bundle; #/join/K7QX opens the player app
 ├── src/
 │   ├── engine/    types.ts grid.ts fov.ts lighting.ts movement.ts generator.ts
 │   ├── render/    canvas.ts layers.ts sprites.ts
 │   ├── ui/        panels/ tools/ inspector.ts layers-panel.ts
-│   ├── net/       room.ts protocol.ts
+│   ├── net/       protocol.ts views.ts host.ts transport.ts wsTransport.ts peerTransport.ts
+│   ├── player/    app.ts (the player screen)
+├── server/host.mjs  LAN relay: serves dist/ and forwards messages; holds no state
 │   ├── store/     campaigns.ts json.ts
 │   └── main.ts
 ├── tests/         fov.test.ts lighting.test.ts generator.test.ts

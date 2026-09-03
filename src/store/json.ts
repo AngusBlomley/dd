@@ -5,7 +5,7 @@
    - v4: secret doors, campaign files */
 
 import type { Token } from '../engine/data';
-import type { Cell, CellMemory, Grid } from '../engine/grid';
+import type { Cell, CellMemory, Grid, MapLink } from '../engine/grid';
 
 export const MAP_FORMAT = 4;
 export const CAMPAIGN_FORMAT = 1;
@@ -66,10 +66,11 @@ export function serializeCampaign(c: Campaign): CampaignFile {
 
 /* ---------- migration ---------- */
 
-interface LegacyCell { t: string; w?: boolean; d?: boolean; doOpen?: boolean; secret?: boolean; p?: string | null; ex?: boolean; mem?: Partial<CellMemory> | null }
+interface LegacyCell { t: string; w?: boolean; d?: boolean; doOpen?: boolean; secret?: boolean; p?: string | null; link?: MapLink | null; ex?: boolean; mem?: Partial<CellMemory> | null }
 
 function migrateCell(c: LegacyCell): Cell {
   const cell: Cell = { t: c.t || 'void', w: !!c.w, d: !!c.d, doOpen: !!c.doOpen, secret: !!c.secret, p: c.p || null, mem: null };
+  if (c.link && typeof c.link.mapId === 'string') cell.link = { mapId: c.link.mapId, x: c.link.x | 0, y: c.link.y | 0 };
   if (c.mem) cell.mem = { t: c.mem.t || cell.t, w: !!c.mem.w, d: !!c.mem.d, doOpen: !!c.mem.doOpen, p: c.mem.p || null, secret: !!c.mem.secret };
   else if (c.ex) cell.mem = { t: cell.t, w: cell.w, d: cell.d, doOpen: cell.doOpen, p: cell.p, secret: cell.secret };
   return cell;

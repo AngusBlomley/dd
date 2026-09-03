@@ -3,9 +3,12 @@
 import {
   DARKVISION_OPTIONS, DEFAULT_TOKEN_LIGHT, TOKEN_TYPE_COLORS, type Token, type TokenType,
 } from '../engine/data';
+import { entriesOf, mapById } from '../campaign';
+import { cellAt } from '../engine/grid';
 import { requestRender } from '../render/canvas';
 import { markChanged, pushUndo, state } from '../state';
 import { $, escapeHtml } from './dom';
+import { sendThrough } from './sessionPanel';
 import { setStatus } from './status';
 
 const ft = (cells: number) => cells * 5 + ' ft';
@@ -109,7 +112,11 @@ export function renderTokenList(): void {
 export function renderInspector(): void {
   const body = $('inspectorBody');
   const tok = state.tokens.find(t => t.id === state.selectedTokenId);
-  if (!tok) { body.innerHTML = '<div class="empty-note">Select a token on the map, or in the Tokens tab, to edit it here.</div>'; return; }
+  if (!tok) {
+    if (state.selectedCell) { renderCellInspector(body, state.selectedCell.x, state.selectedCell.y); return; }
+    body.innerHTML = '<div class="empty-note">Select a token on the map, or in the Tokens tab, to edit it here. With the Select tool, click an Exit or Entry cell to link maps.</div>';
+    return;
+  }
 
   const dvOptions = DARKVISION_OPTIONS.map(c => `<option value="${c}">${c === 0 ? 'None' : ft(c)}</option>`).join('');
   body.innerHTML = `
@@ -133,7 +140,23 @@ export function renderInspector(): void {
       <input type="range" id="insDim" min="0" max="24">
     </div>
     <div class="check-row"><input type="checkbox" id="insHidden"><label for="insHidden">Hidden from players</label></div>
+    <div id="insExit"></div>
     <button class="btn danger full-btn" id="insDelete" style="margin-top:14px">Remove Token</button>`;
+
+  const here = cellAt(state.grid, tok.x, tok.y);
+  if (here && here.p === 'exit' && state.mapId) {
+    const target = here.link ? mapById(here.link.mapId) : undefined;
+    const box = $('insExit');
+    if (tok.type === 'pc' && target) {
+      box.innerHTML = `<div class="callout-small">Standing at an exit to <b>${escapeHtml(target.name)}</b>.</div>`;
+      const b = document.createElement('button');
+      b.className = 'btn primary full-btn'; b.textContent = 'Send through to ' + target.name;
+      b.addEventListener('click', () => sendThrough(state.mapId!, tok.id));
+      box.appendChild(b);
+    } else if (!here.link) {
+      box.innerHTML = '<div class="callout-small">This exit has no link yet. Deselect, then click the exit cell with the Select tool to link it.</div>';
+    }
+  }
 
   const f = <T extends HTMLElement>(id: string) => $<T>(id);
   f<HTMLInputElement>('insName').value = tok.name;
@@ -184,4 +207,60 @@ export function renderInspector(): void {
   };
   body.querySelectorAll('input,select').forEach(elm => elm.addEventListener('input', commit));
   f('insDelete').addEventListener('click', () => deleteToken(tok.id));
+}
+
+/* ---------- exit / entry cell inspector ---------- */
+
+function renderCellInspector(body: HTMLElement, x: number, y: number): void {
+  const cell = cellAt(state.grid, x, y);
+  const c = state.campaign;
+  if (!cell || !c) { body.innerHTML = ''; return; }
+  if (cell.p === 'entry') {
+    body.innerHTML = `<div class="callout-small"><b>Entry</b> at (${x}, ${y}). Exits on other maps can link here. Characters sent through arrive on this cell.</div>`;
+    return;
+  }
+  if (cell.p !== 'exit') { body.innerHTML = ''; return; }
+  const link = cell.link ?? null;
+  const mapOpts = c.maps.map(m => `<option value="${m.id}"${link && link.mapId === m.id ? ' selected' : ''}>${escapeHtml(m.name)}${m.id === state.mapId ? ' (this map)' : ''}</option>`).join('');
+  body.innerHTML = `
+    <div class="callout-small"><b>Exit</b> at (${x}, ${y}). A character standing here waits until you send them through.</div>
+    <label class="field">Leads to map</label>
+    <select id="exitMap"><option value="">— not linked —</option>${mapOpts}</select>
+    <label class="field">Arrives at</label>
+    <select id="exitEntry"></select>
+    <div class="hint">Place an Entry prop on the target map to get arrival points here, or pick a cell by coordinates.</div>
+    <div class="row2"><div><label class="field">x</label><input type="number" id="exitX" min="0"></div><div><label class="field">y</label><input type="number" id="exitY" min="0"></div></div>
+    <button class="btn primary full-btn" id="exitSave">Save link</button>
+    <button class="btn full-btn" id="exitClear">Remove link</button>`;
+  const mapSel = $<HTMLSelectElement>('exitMap');
+  const entrySel = $<HTMLSelectElement>('exitEntry');
+  const xIn = $<HTMLInputElement>('exitX'), yIn = $<HTMLInputElement>('exitY');
+  const fillEntries = () => {
+    const m = mapById(mapSel.value);
+    entrySel.innerHTML = '<option value="">Custom cell (below)</option>';
+    if (!m) return;
+    for (const e of entriesOf(m)) {
+      const sel = link && link.mapId === m.id && link.x === e.x && link.y === e.y ? ' selected' : '';
+      entrySel.innerHTML += `<option value="${e.x},${e.y}"${sel}>Entry at (${e.x}, ${e.y})</option>`;
+    }
+    if (entrySel.value === '' && entrySel.options.length > 1 && !link) entrySel.selectedIndex = 1;
+    if (entrySel.value) { const [ex, ey] = entrySel.value.split(','); xIn.value = ex; yIn.value = ey; }
+  };
+  if (link) { xIn.value = String(link.x); yIn.value = String(link.y); }
+  fillEntries();
+  mapSel.addEventListener('change', fillEntries);
+  entrySel.addEventListener('change', () => { if (entrySel.value) { const [ex, ey] = entrySel.value.split(','); xIn.value = ex; yIn.value = ey; } });
+  $('exitSave').addEventListener('click', () => {
+    const m = mapById(mapSel.value);
+    const lx = parseInt(xIn.value, 10), ly = parseInt(yIn.value, 10);
+    if (!m || isNaN(lx) || isNaN(ly) || lx < 0 || ly < 0 || lx >= m.grid.w || ly >= m.grid.h) { alert('Pick a map and a cell inside it.'); return; }
+    pushUndo();
+    cell.link = { mapId: m.id, x: lx, y: ly };
+    markChanged(); requestRender(); renderInspector();
+  });
+  $('exitClear').addEventListener('click', () => {
+    pushUndo();
+    cell.link = null;
+    markChanged(); requestRender(); renderInspector();
+  });
 }

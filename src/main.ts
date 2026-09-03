@@ -4,6 +4,7 @@ import { initCampaignModal, initMapsPanel, renderMapList } from './ui/campaignPa
 import { initInteraction, initZoomAndViews } from './ui/interaction';
 import { initGeneratorPanel, initLayersPanel, initMapSettings } from './ui/panels';
 import { setSaveStatus, setStatus } from './ui/status';
+import { initSessionPanel } from './ui/sessionPanel';
 import { initBrushButtons, initSwatches, initTabs } from './ui/swatches';
 import { initTokenForm, renderInspector, renderTokenList } from './ui/tokens';
 
@@ -19,6 +20,7 @@ async function main(): Promise<void> {
   initLayersPanel();
   initMapsPanel();
   initCampaignModal();
+  initSessionPanel();
 
   onSaveStatus(setSaveStatus);
   await bootCampaign();
@@ -32,4 +34,9 @@ async function main(): Promise<void> {
   setSaveStatus('saved');
 }
 
-void main();
+const joinMatch = /^#\/join(?:\/([A-Za-z0-9]+))?/.exec(location.hash);
+if (joinMatch) {
+  void import('./player/app').then(m => m.startPlayerApp(joinMatch[1] ? joinMatch[1].toUpperCase() : null));
+} else {
+  void main();
+}

@@ -41,6 +41,7 @@ export interface AppState {
   zoom: number;
   baseCell: number;
   selectedTokenId: number | null;
+  selectedCell: { x: number; y: number } | null; // a cell picked with the Select tool (exit links)
   placingToken: boolean; // "Place on Map" armed; the form is read at click time
   dirty: boolean;        // unsaved changes since the last autosave
 }
@@ -62,6 +63,7 @@ export const state: AppState = {
   zoom: 1,
   baseCell: 28,
   selectedTokenId: null,
+  selectedCell: null,
   placingToken: false,
   dirty: false,
 };

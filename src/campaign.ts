@@ -1,7 +1,8 @@
 /* Campaign lifecycle: open, create, switch maps, autosave. Sits between state and store. */
 
+import type { Token } from './engine/data';
 import { createGrid, type Grid } from './engine/grid';
-import { clearHistory, invalidateScene, onChange, state } from './state';
+import { clearHistory, invalidateScene, markChanged, onChange, state } from './state';
 import { newId, type Campaign, type MapRecord } from './store/json';
 import { getLastCampaignId, importLegacyMaps, listCampaigns, loadCampaign, saveCampaign, setLastCampaignId } from './store/storage';
 
@@ -47,6 +48,9 @@ function scheduleSave(): void {
   if (saveTimer !== null) window.clearTimeout(saveTimer);
   saveTimer = window.setTimeout(() => { saveTimer = null; void saveNow(); }, AUTOSAVE_MS);
 }
+
+/** Ask for an autosave without going through markChanged (no scene invalidation). */
+export function requestSave(): void { state.dirty = true; scheduleSave(); }
 
 export function initAutosave(): void {
   onChange(scheduleSave);
@@ -114,6 +118,46 @@ export function renameMap(mapId: string, name: string): void {
   if (!m || !name.trim()) return;
   m.name = name.trim();
   scheduleSave();
+}
+
+/* ---------- linked maps ---------- */
+
+export function mapById(mapId: string): MapRecord | undefined {
+  return state.campaign?.maps.find(m => m.id === mapId);
+}
+
+/** Cells holding an Entry prop on a map, for exit-link pickers. */
+export function entriesOf(map: MapRecord): { x: number; y: number }[] {
+  const out: { x: number; y: number }[] = [];
+  for (let i = 0; i < map.grid.cells.length; i++) {
+    if (map.grid.cells[i].p === 'entry') out.push({ x: i % map.grid.w, y: Math.floor(i / map.grid.w) });
+  }
+  return out;
+}
+
+/**
+ * Moves a token from one map to a cell on another. Returns the token's id on
+ * the target map (ids are per map), or null if anything was missing.
+ */
+export function transferToken(fromMapId: string, tokenId: number, toMapId: string, x: number, y: number): number | null {
+  const c = state.campaign;
+  if (!c) return null;
+  commitCurrentMap();
+  const from = c.maps.find(m => m.id === fromMapId);
+  const to = c.maps.find(m => m.id === toMapId);
+  if (!from || !to) return null;
+  const idx = from.tokens.findIndex(t => t.id === tokenId);
+  if (idx < 0) return null;
+  if (x < 0 || y < 0 || x >= to.grid.w || y >= to.grid.h) return null;
+  const [tok] = from.tokens.splice(idx, 1);
+  const moved: Token = { ...tok, id: to.nextTokenId++, x, y };
+  to.tokens.push(moved);
+  // keep the live state in step with whichever record is active
+  if (state.mapId === from.id) { state.tokens = from.tokens; }
+  if (state.mapId === to.id) { state.tokens = to.tokens; state.nextTokenId = to.nextTokenId; }
+  if (state.selectedTokenId === tokenId && state.mapId === from.id) state.selectedTokenId = null;
+  markChanged();
+  return moved.id;
 }
 
 /* ---------- campaigns ---------- */
