@@ -1,54 +1,192 @@
 import { describe, expect, it } from 'vitest';
 import type { Token } from '../src/engine/data';
-import { cellAt, createGrid } from '../src/engine/grid';
-import { computeSceneVisibility, isSeenNow } from '../src/engine/lighting';
+import { cellAt, createGrid, type Grid } from '../src/engine/grid';
+import {
+  BRIGHT, DIM, DARK, SEEN_BRIGHT, SEEN_DARKVISION, SEEN_DIM, UNSEEN,
+  collectLightSources, computeLightMap, computeScene, computeVision, markExplored, tokenVisibleToParty,
+} from '../src/engine/lighting';
 
 function token(partial: Partial<Token>): Token {
   return {
     id: 1, name: 'T', type: 'pc', x: 0, y: 0, color: '#fff', size: 1,
-    vision: 6, darkvision: false, hasLight: false, lightRadius: 4, ...partial,
+    vision: { radius: 12, darkvision: 0 }, light: null, ...partial,
   };
 }
+const at = (arr: Uint8Array, grid: Grid, x: number, y: number) => arr[y * grid.w + x];
 
-describe('computeSceneVisibility (prototype 1 behaviour)', () => {
-  it('an unlit room is not seen by a token without darkvision', () => {
-    const grid = createGrid(11, 11, 'stone');
-    const scene = computeSceneVisibility(grid, [token({ x: 5, y: 5 })]);
-    expect(isSeenNow(scene, 5, 5)).toBe(false);
-    expect(isSeenNow(scene, 7, 5)).toBe(false);
+/** A 1-cell-high corridor with walls above and below, open from x=1..w-2. */
+function corridor(w: number): Grid {
+  const g = createGrid(w, 3, 'stone');
+  for (let x = 0; x < w; x++) { cellAt(g, x, 0)!.w = true; cellAt(g, x, 2)!.w = true; }
+  cellAt(g, 0, 1)!.w = true; cellAt(g, w - 1, 1)!.w = true;
+  return g;
+}
+
+describe('light map', () => {
+  it('a torch prop gives bright then dim light, then darkness', () => {
+    const g = corridor(24);
+    cellAt(g, 11, 1)!.p = 'torch';
+    const light = computeLightMap(g, collectLightSources(g, []));
+    expect(at(light, g, 11, 1)).toBe(BRIGHT);
+    expect(at(light, g, 15, 1)).toBe(BRIGHT); // 4 away
+    expect(at(light, g, 16, 1)).toBe(DIM);    // 5 away
+    expect(at(light, g, 19, 1)).toBe(DIM);    // 8 away
+    expect(at(light, g, 20, 1)).toBe(DARK);   // 9 away
   });
 
-  it('a torch prop lights cells so a nearby token can see them', () => {
-    const grid = createGrid(11, 11, 'stone');
-    cellAt(grid, 5, 5)!.p = 'torch';
-    const scene = computeSceneVisibility(grid, [token({ x: 5, y: 7 })]);
-    expect(isSeenNow(scene, 5, 5)).toBe(true);
-    expect(isSeenNow(scene, 5, 3)).toBe(true);
+  it('overlapping lights take the brightest', () => {
+    const g = createGrid(20, 5, 'stone');
+    const light = computeLightMap(g, [{ x: 2, y: 2, bright: 2, dim: 10 }, { x: 8, y: 2, bright: 3, dim: 4 }]);
+    expect(at(light, g, 6, 2)).toBe(BRIGHT); // dim from first, bright from second
   });
 
-  it('a token carrying light sees around itself', () => {
-    const grid = createGrid(11, 11, 'stone');
-    const scene = computeSceneVisibility(grid, [token({ x: 5, y: 5, hasLight: true, lightRadius: 3 })]);
-    expect(isSeenNow(scene, 5, 5)).toBe(true);
-    expect(isSeenNow(scene, 8, 5)).toBe(true);
-    expect(isSeenNow(scene, 5, 10)).toBe(false);
+  it('walls stop light', () => {
+    const g = createGrid(10, 3, 'stone');
+    cellAt(g, 5, 1)!.w = true;
+    const light = computeLightMap(g, [{ x: 2, y: 1, bright: 8, dim: 8 }]);
+    expect(at(light, g, 5, 1)).toBe(BRIGHT); // the wall face is lit
+    expect(at(light, g, 6, 1)).toBe(DARK);
+  });
+});
+
+describe('party vision (spec section 4)', () => {
+  // Acceptance test 1
+  it('a monster with darkvision in an unlit room is not seen by the party', () => {
+    const g = createGrid(30, 30, 'stone');
+    const pc = token({ id: 1, type: 'pc', x: 2, y: 2, vision: { radius: 12, darkvision: 0 } });
+    const monster = token({ id: 2, type: 'monster', x: 20, y: 20, vision: { radius: 12, darkvision: 12 } });
+    const scene = computeScene(g, [pc, monster]);
+    expect(at(scene.party, g, 20, 20)).toBe(UNSEEN);
+    expect(tokenVisibleToParty(monster, scene.party, g.w)).toBe(false);
+    // but the DM's monster-vision overlay does show what it sees
+    expect(at(scene.monsters, g, 20, 20)).toBe(SEEN_DARKVISION);
   });
 
-  it('darkvision sees unlit cells within its radius', () => {
-    const grid = createGrid(11, 11, 'stone');
-    const scene = computeSceneVisibility(grid, [token({ x: 5, y: 5, darkvision: true, vision: 3 })]);
-    expect(isSeenNow(scene, 8, 5)).toBe(true);
-    expect(isSeenNow(scene, 5, 10)).toBe(false);
+  it('a monster is drawn once it stands in a cell the party sees', () => {
+    const g = createGrid(30, 30, 'stone');
+    const pc = token({ id: 1, type: 'pc', x: 2, y: 2, light: { bright: 4, dim: 8 } });
+    const monster = token({ id: 2, type: 'monster', x: 5, y: 2, vision: { radius: 12, darkvision: 12 } });
+    const scene = computeScene(g, [pc, monster]);
+    expect(tokenVisibleToParty(monster, scene.party, g.w)).toBe(true);
   });
 
-  // Documents spec bug B1, to be fixed in Phase 1. When it is fixed this
-  // expectation flips: a monster must not contribute to the party's vision.
-  it('KNOWN BUG B1: a monster with darkvision currently reveals itself', () => {
-    const grid = createGrid(11, 11, 'stone');
-    const scene = computeSceneVisibility(grid, [
-      token({ id: 1, type: 'pc', x: 1, y: 1, vision: 2 }),
-      token({ id: 2, type: 'monster', x: 9, y: 9, darkvision: true, vision: 2 }),
-    ]);
-    expect(isSeenNow(scene, 9, 9)).toBe(true);
+  it('hidden tokens are never drawn for players', () => {
+    const g = createGrid(10, 10, 'stone');
+    const pc = token({ id: 1, type: 'pc', x: 2, y: 2, light: { bright: 4, dim: 8 } });
+    const secret = token({ id: 2, type: 'object', x: 3, y: 2, hidden: true });
+    const scene = computeScene(g, [pc, secret]);
+    expect(tokenVisibleToParty(secret, scene.party, g.w)).toBe(false);
+  });
+
+  // Acceptance test 2
+  it('a PC with a torch in a corridor sees 1-4 bright, 5-8 dim, 9 not at all', () => {
+    const g = corridor(40);
+    const pc = token({ x: 20, y: 1, vision: { radius: 12, darkvision: 0 }, light: { bright: 4, dim: 8 } });
+    const party = computeVision(g, [pc], computeLightMap(g, collectLightSources(g, [pc])));
+    for (const dir of [1, -1]) {
+      for (let d = 1; d <= 4; d++) expect(at(party, g, 20 + dir * d, 1), `bright at ${d}`).toBe(SEEN_BRIGHT);
+      for (let d = 5; d <= 8; d++) expect(at(party, g, 20 + dir * d, 1), `dim at ${d}`).toBe(SEEN_DIM);
+      expect(at(party, g, 20 + dir * 9, 1), 'unseen at 9').toBe(UNSEEN);
+    }
+  });
+
+  it('vision radius caps how far lit cells are seen', () => {
+    const g = corridor(40);
+    cellAt(g, 30, 1)!.p = 'torch';
+    const pc = token({ x: 20, y: 1, vision: { radius: 6, darkvision: 0 } });
+    const scene = computeScene(g, [pc]);
+    expect(at(scene.light, g, 26, 1)).toBe(BRIGHT);   // 4 from the torch
+    expect(at(scene.party, g, 26, 1)).toBe(SEEN_BRIGHT); // 6 from the PC: in range
+    expect(at(scene.light, g, 27, 1)).toBe(BRIGHT);
+    expect(at(scene.party, g, 27, 1)).toBe(UNSEEN);      // 7 from the PC: out of range
+  });
+
+  // Acceptance test 5
+  it('a drow with 24-cell darkvision in a black cave sees 24 cells of grey and nothing beyond', () => {
+    const g = createGrid(60, 5, 'stone');
+    const drow = token({ x: 30, y: 2, vision: { radius: 30, darkvision: 24 } });
+    const scene = computeScene(g, [drow]);
+    expect(at(scene.party, g, 54, 2)).toBe(SEEN_DARKVISION);
+    expect(at(scene.party, g, 55, 2)).toBe(UNSEEN);
+    expect(at(scene.party, g, 6, 2)).toBe(SEEN_DARKVISION);
+    expect(at(scene.party, g, 5, 2)).toBe(UNSEEN);
+  });
+
+  it('darkvision shows dim light as seen-dim and bright as seen-bright', () => {
+    const g = corridor(40);
+    cellAt(g, 20, 1)!.p = 'torch';
+    const pc = token({ x: 10, y: 1, vision: { radius: 12, darkvision: 12 } });
+    const scene = computeScene(g, [pc]);
+    expect(at(scene.party, g, 17, 1)).toBe(SEEN_BRIGHT); // 3 from torch
+    expect(at(scene.party, g, 13, 1)).toBe(SEEN_DIM);    // 7 from torch
+    expect(at(scene.party, g, 4, 1)).toBe(SEEN_DARKVISION);
+  });
+
+  it('NPCs and objects never contribute to party vision', () => {
+    const g = createGrid(30, 5, 'stone');
+    const pc = token({ id: 1, type: 'pc', x: 1, y: 2, vision: { radius: 2, darkvision: 2 } });
+    const npc = token({ id: 2, type: 'npc', x: 20, y: 2, vision: { radius: 12, darkvision: 6 } });
+    const obj = token({ id: 3, type: 'object', x: 10, y: 2, vision: { radius: 12, darkvision: 6 } });
+    const party = computeScene(g, [pc, npc, obj]).party;
+    expect(at(party, g, 22, 2)).toBe(UNSEEN);
+    expect(at(party, g, 12, 2)).toBe(UNSEEN);
+    expect(at(party, g, 2, 2)).toBe(SEEN_DARKVISION);
+  });
+
+  // Acceptance test 7
+  it('opening a door extends light and sight through it; closing stops it', () => {
+    const g = corridor(30);
+    cellAt(g, 10, 1)!.p = 'torch';
+    const door = cellAt(g, 14, 1)!;
+    door.d = true; door.doOpen = false;
+    const pc = token({ x: 12, y: 1, vision: { radius: 12, darkvision: 0 } });
+    let scene = computeScene(g, [pc]);
+    expect(at(scene.party, g, 14, 1)).toBe(SEEN_BRIGHT); // sees the closed door
+    expect(at(scene.party, g, 15, 1)).toBe(UNSEEN);
+    door.doOpen = true;
+    scene = computeScene(g, [pc]);
+    expect(at(scene.party, g, 15, 1)).toBe(SEEN_DIM);    // 5 from torch
+    expect(at(scene.party, g, 16, 1)).toBe(SEEN_DIM);
+  });
+});
+
+describe('explored memory (spec acceptance test 6)', () => {
+  it('computeScene never writes to the grid; markExplored is the only writer', () => {
+    const g = createGrid(12, 12, 'stone');
+    const pc = token({ x: 5, y: 5, light: { bright: 3, dim: 3 } });
+    const before = JSON.stringify(g);
+    const scene = computeScene(g, [pc]);
+    computeScene(g, [pc]);
+    expect(JSON.stringify(g)).toBe(before);
+
+    const added = markExplored(g, scene.party);
+    expect(added).toBeGreaterThan(20);
+    expect(cellAt(g, 5, 5)!.mem).not.toBeNull();
+    expect(cellAt(g, 11, 11)!.mem).toBeNull();
+    // idempotent
+    expect(markExplored(g, scene.party)).toBe(0);
+  });
+
+  it('memory is a snapshot: edits made out of sight are not reflected until seen again', () => {
+    const g = createGrid(30, 3, 'stone');
+    const pc = token({ x: 3, y: 1, light: { bright: 3, dim: 3 } });
+    markExplored(g, computeScene(g, [pc]).party);
+    const seenCell = cellAt(g, 6, 1)!;
+    expect(seenCell.mem).toEqual({ t: 'stone', w: false, d: false, doOpen: false, p: null });
+
+    // party walks away, DM builds a wall and drops a chest where they used to be
+    pc.x = 25;
+    markExplored(g, computeScene(g, [pc]).party);
+    seenCell.w = true;
+    cellAt(g, 5, 1)!.p = 'chest';
+    markExplored(g, computeScene(g, [pc]).party);
+    expect(seenCell.mem!.w).toBe(false);          // memory still shows floor
+    expect(cellAt(g, 5, 1)!.mem!.p).toBeNull();   // and no chest
+
+    // party comes back and looks again
+    pc.x = 3;
+    markExplored(g, computeScene(g, [pc]).party);
+    expect(cellAt(g, 5, 1)!.mem!.p).toBe('chest');
+    expect(seenCell.mem!.w).toBe(true);
   });
 });

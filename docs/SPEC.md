@@ -1,6 +1,6 @@
 # Cartographer's Table — Spec & Roadmap
 
-_Version 0.1 — 3 Sep 2026. Drafted from the prototype-1 HTML and the planning call. Status: for review._
+_Version 0.2 — 3 Sep 2026. Drafted from the prototype-1 HTML and the planning call; updated with the DM's answers to the open questions. Status: Phase 0 done, Phase 1 done._
 
 ## 1. What we are building
 
@@ -38,10 +38,10 @@ Taken from the call. **Must** = needed before the group uses it at the table. **
 
 - R1. In Player View a cell is drawn only if a party member has line of sight to it **and** it is lit, or it is within a party member's darkvision range.
 - R2. Monsters, NPCs and hidden objects are invisible until they stand on a cell the party can currently see. They never reveal themselves.
-- R3. Party vision is shared: what any PC sees, every player sees. Per-player "hardcore" vision is a later mode.
+- R3. Party vision is shared: what any PC sees, every player sees. Only player characters count; NPCs and monsters never reveal anything. Per-player "hardcore" vision is a later mode.
 - R4. Light sources have a bright radius and a dim radius (5e: torch 20 ft bright / 20 ft further dim). Bright, dim, darkvision-only and unseen render distinctly.
 - R5. Darkvision has a range (60 ft default, 120 ft option for drow / deep gnomes) and shows dark cells in greyscale.
-- R6. Cells already seen stay as dimmed "memory" once vision moves away. Memory is per map, shared by the party, and resettable by the DM.
+- R6. Cells already seen stay as dimmed "memory" once vision moves away. Memory is a snapshot of what was there when the party last looked: DM edits in explored-but-unseen areas stay hidden until the party looks again. Memory is per map, shared by the party, and resettable by the DM.
 - R7. Walls block sight, light and movement. Closed doors block sight and light. Pillars and statues block sight. Doors toggle open/closed.
 - R8. The DM can preview exactly what the players see without changing anything.
 
@@ -58,7 +58,7 @@ Taken from the call. **Must** = needed before the group uses it at the table. **
 
 - R15. More terrain: Underdark first (fungus floor, rough cave, chasm/pit, shallow water, deep water, mud, ice, crystal, webbing, moss). Overworld basics kept.
 - R16. More props: fungus lantern, brazier, campfire, glowing crystal, glowing mushroom cluster (light-emitting), cage, boat, bridge, rope, cart, well, mushroom (large, blocks sight), stalagmite (blocks), portcullis (door variant), ladder, trapdoor, secret door (DM-only until revealed).
-- R17. Token types stay free-form (PC / NPC / Monster / Object) with colour, size, vision and light. Add "hidden" flag for DM-only tokens and "with the party" flag for NPCs.
+- R17. Token types stay free-form (PC / NPC / Monster / Object) with colour, size, vision and light. Add "hidden" flag for DM-only tokens. Players see tokens as colour plus initials only, no names.
 - R18. Generator gains a cave theme that produces organic caverns (cellular automata) rather than rectangular rooms.
 
 ### 3.4 Multiplayer session — Should (Prototype 3)
@@ -97,7 +97,7 @@ This section is the contract the engine is tested against.
 
 **Light map.** For every light source (prop light or token carrying light): cast FOV out to its dim radius. Cells within the bright radius get `bright`; cells beyond that, up to the dim radius, get `dim`. Light levels combine by taking the brightest.
 
-**Party vision.** For every token that counts as party (type `pc`, or `npc` with `withParty`): cast FOV out to `max(visionRadius, darkvisionRadius)`. For each cell in that FOV:
+**Party vision.** For every player character token: cast FOV out to `max(visionRadius, darkvisionRadius)`. For each cell in that FOV:
 
 | Light at cell | Within darkvision range | Visible? | Rendered as |
 |---|---|---|---|
@@ -106,7 +106,7 @@ This section is the contract the engine is tested against.
 | dark | yes | yes | greyscale |
 | dark | no | no | black, or memory if explored |
 
-The party's visible set is the union over party tokens. Every cell in it becomes explored.
+The party's visible set is the union over PC tokens. Every cell in it has its current appearance (terrain, wall, door state, prop) snapshotted into memory; memory renders from that snapshot, never from the live cell.
 
 **Token visibility in Player View.** A token is drawn only if its cell is in the party's visible set, or it is a party token. Hidden tokens are never drawn in Player View.
 
@@ -171,7 +171,7 @@ GameMap {
   walls:     Uint8Array   // 0 none, 1 wall, 2 door closed, 3 door open, 4 secret door
   props:     Prop[]       // { id, kind, x, y, rotation?, hidden? }
   tokens:    Token[]
-  explored:  Uint8Array   // 1 if the party has seen it (fog memory)
+  memory:    CellMemory[] // per cell: what the party last saw there, or null (fog memory)
   notes:     Note[]       // DM-only text pinned to cells
 }
 
@@ -181,7 +181,6 @@ Token {
   colour, initials?,
   vision: { radius: number, darkvision: number },   // cells; 0 = none
   light?: { bright: number, dim: number },
-  withParty?: boolean,   // npc counts toward party vision
   hidden?: boolean,      // DM-only, never sent to players
   ownerPlayerId?: string // set in a session when a player is assigned
 }
@@ -239,14 +238,14 @@ dd/
 
 Phases are ordered by what the DM asked for: lighting first, then editor quality, then multiplayer, then turns last. Each phase ends in something usable at the table.
 
-### Phase 0 — Foundations (small)
+### Phase 0 — Foundations (small) — done
 
 - Create the GitHub repo; move prototype 1 to `legacy/dnd-map-builder.html` and commit it.
 - Vite + TypeScript + Vitest scaffold; GitHub Pages deploy on push to `main`.
 - Port prototype 1 into `engine/ render/ ui/ store/` with no behaviour change.
 - **Done when:** the live URL does everything prototype 1 did, and `npm test` runs.
 
-### Phase 1 — Prototype 2: lighting done right (medium)
+### Phase 1 — Prototype 2: lighting done right (medium) — done
 
 - Symmetric shadowcasting FOV (B2).
 - Bright/dim/dark light model, darkvision ranges, greyscale rendering (R4, R5).
@@ -254,6 +253,7 @@ Phases are ordered by what the DM asked for: lighting first, then editor quality
 - Explored memory as an explicit state step; DM preview is read-only (B3, R6, R8).
 - Light and vision overlays in DM view (part of R10).
 - Token colour follows type (B4); Select/Move tool with `V` / `Esc` (B5).
+- Fog memory as a snapshot of what was last seen (Q4).
 - Unit tests for the seven acceptance cases in §4.
 - **Done when:** the DM can run a room-by-room reveal on the tablet with Player View and it looks right every time.
 
@@ -286,15 +286,15 @@ Phases are ordered by what the DM asked for: lighting first, then editor quality
 
 Backlog items in §3.6, in whatever order the table asks for them.
 
-## 7. Open questions for the DM
+## 7. Open questions for the DM — answered 3 Sep 2026
 
-1. **NPC vision.** Should an allied NPC travelling with the party contribute to what players see, or only PCs? (Spec assumes a per-token "with the party" flag.)
-2. **Dim light.** Do you want the bright/dim distinction shown to players, or is "lit / not lit" enough? (Spec assumes shown, since Out of the Abyss cares about it.)
-3. **Player names on tokens.** Should players see each other's names on the map, or just colours and initials?
-4. **Memory fog.** Should players see explored-but-not-currently-visible areas, or only the DM? (Spec assumes players see memory.)
-5. **Room persistence.** If the DM's tablet drops off Wi-Fi mid-session, is it fine that players see a "waiting for DM" screen until it comes back?
-6. **Map sizes.** What is the biggest map you expect? The cap is currently 100×80 cells (500×400 ft).
-7. **Anything from Roll20 or Dungeon Scrawl you'd miss** that is not in §3?
+1. **NPC vision.** Only PCs count. NPCs never contribute to what players see. _Applied: R3, R17, §4._
+2. **Dim light.** Three levels: lit, dim, dark. Lit has a restricted radius that falls off to dim and then dark. _Applied: R4. The engine uses bright and dim radii per light; a smoother visual gradient between the bands is a rendering polish item for Phase 2._
+3. **Player names on tokens.** Colours and initials only. _Applied: R17._
+4. **Memory fog.** Players see explored areas, but changes made in areas they have explored and can no longer see are not visible to them. _Applied: R6 and §4; memory is a snapshot._
+5. **Room persistence.** A "waiting for the DM" screen while the tablet reconnects is fine. _Applied: §5.4._
+6. **Map sizes.** The current cap (100×80 cells) is enough.
+7. **Roll20 / Dungeon Scrawl features.** Not yet reviewed.
 
 ## 8. Out of scope
 

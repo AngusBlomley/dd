@@ -3,7 +3,7 @@
 import { generateDungeon } from '../engine/generator';
 import { createGrid, resizeGrid } from '../engine/grid';
 import { requestRender } from '../render/canvas';
-import { invalidateVisibility, pushUndo, state } from '../state';
+import { invalidateScene, pushUndo, state } from '../state';
 import { $ } from './dom';
 import { setStatus } from './status';
 import { renderInspector, renderTokenList } from './tokens';
@@ -29,7 +29,7 @@ export function initGeneratorPanel(): void {
       seed: $<HTMLInputElement>('genSeed').value.trim(),
     });
     state.tokens.forEach(t => { t.x = Math.min(t.x, state.grid.w - 1); t.y = Math.min(t.y, state.grid.h - 1); });
-    invalidateVisibility();
+    invalidateScene();
     requestRender(); setStatus();
   });
 }
@@ -41,14 +41,14 @@ export function initMapSettings(): void {
     pushUndo();
     state.grid = resizeGrid(state.grid, w, h);
     state.tokens = state.tokens.filter(t => t.x < w && t.y < h);
-    invalidateVisibility();
+    invalidateScene();
     requestRender(); setStatus(); renderTokenList();
   });
 
   $('btnClearFog').addEventListener('click', () => {
     pushUndo();
-    state.grid.cells.forEach(c => { c.ex = false; });
-    invalidateVisibility();
+    state.grid.cells.forEach(c => { c.mem = null; });
+    invalidateScene();
     requestRender();
   });
 
@@ -57,7 +57,7 @@ export function initMapSettings(): void {
     pushUndo();
     state.grid = createGrid(34, 24, 'stone');
     state.tokens = []; state.selectedTokenId = null;
-    invalidateVisibility();
+    invalidateScene();
     requestRender(); setStatus(); renderTokenList(); renderInspector();
   });
 }

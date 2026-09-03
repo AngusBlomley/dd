@@ -1,7 +1,7 @@
 /* Save / Load modals (IndexedDB), JSON export / import, PNG export. */
 
 import { canvas, render, requestRender } from '../render/canvas';
-import { invalidateVisibility, pushUndo, state } from '../state';
+import { invalidateScene, pushUndo, state } from '../state';
 import { parseMap, serializeMap, type MapFile } from '../store/json';
 import { deleteMap, listMaps, loadMap, saveMap } from '../store/storage';
 import { $, escapeHtml } from './dom';
@@ -18,7 +18,7 @@ function applyMapData(data: Partial<MapFile>): void {
   state.tokens = parsed.tokens;
   state.nextTokenId = parsed.nextTokenId;
   state.selectedTokenId = null;
-  invalidateVisibility();
+  invalidateScene();
   requestRender(); setStatus(); renderTokenList(); renderInspector();
 }
 

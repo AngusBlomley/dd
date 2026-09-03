@@ -1,5 +1,7 @@
-/* Line of sight. Phase 0 keeps prototype 1's Bresenham approach unchanged.
-   Phase 1 replaces this with symmetric shadowcasting (spec B2). */
+/* Field of view by symmetric shadowcasting (Albert Ford's algorithm).
+   Symmetric: if a floor cell A can see floor cell B, then B can see A.
+   One extra rule for square-cell walls: sight does not squeeze diagonally
+   between two wall cells that touch only at a corner. */
 
 import { PROP_MAP } from './data';
 import { cellAt, type Cell, type Grid } from './grid';
@@ -12,43 +14,82 @@ export function isOpaque(cell: Cell | null): boolean {
   return false;
 }
 
-export function bresenhamLine(x0: number, y0: number, x1: number, y1: number): [number, number][] {
-  const pts: [number, number][] = [];
-  const dx = Math.abs(x1 - x0), dy = -Math.abs(y1 - y0);
-  const sx = x0 < x1 ? 1 : -1, sy = y0 < y1 ? 1 : -1;
-  let err = dx + dy, x = x0, y = y0;
-  for (;;) {
-    pts.push([x, y]);
-    if (x === x1 && y === y1) break;
-    const e2 = 2 * err;
-    if (e2 >= dy) { err += dy; x += sx; }
-    if (e2 <= dx) { err += dx; y += sy; }
-  }
-  return pts;
+/** A visibility mask: one byte per cell, 1 = visible. */
+export type Mask = Uint8Array;
+
+export function emptyMask(grid: Grid): Mask {
+  return new Uint8Array(grid.w * grid.h);
 }
 
-export function cellKey(x: number, y: number): string {
-  return x + ',' + y;
-}
+// Quadrant transforms from (depth, col) in quadrant space to grid coordinates.
+const QUADRANTS: ((ox: number, oy: number, depth: number, col: number) => [number, number])[] = [
+  (ox, oy, d, c) => [ox + c, oy - d], // north
+  (ox, oy, d, c) => [ox + c, oy + d], // south
+  (ox, oy, d, c) => [ox + d, oy + c], // east
+  (ox, oy, d, c) => [ox - d, oy + c], // west
+];
 
-/** Set of "x,y" keys visible from (ox,oy) within radius cells, respecting opaque cells. */
-export function computeVisibility(grid: Grid, ox: number, oy: number, radius: number): Set<string> {
-  const visible = new Set<string>();
-  if (radius <= 0) { visible.add(cellKey(ox, oy)); return visible; }
-  const r2 = (radius + 0.4) * (radius + 0.4);
-  const minX = Math.max(0, ox - radius), maxX = Math.min(grid.w - 1, ox + radius);
-  const minY = Math.max(0, oy - radius), maxY = Math.min(grid.h - 1, oy + radius);
-  for (let ty = minY; ty <= maxY; ty++) {
-    for (let tx = minX; tx <= maxX; tx++) {
-      const dx = tx - ox, dy = ty - oy;
-      if (dx * dx + dy * dy > r2) continue;
-      const line = bresenhamLine(ox, oy, tx, ty);
-      let blocked = false;
-      for (let i = 1; i < line.length - 1; i++) {
-        if (isOpaque(cellAt(grid, line[i][0], line[i][1]))) { blocked = true; break; }
+/**
+ * Marks every cell visible from (ox, oy) within `radius` cells into `out`
+ * (allocating a new mask when none is given). Opaque cells that are in view
+ * are marked too: you can see the wall you are looking at.
+ */
+export function computeFov(grid: Grid, ox: number, oy: number, radius: number, out?: Mask): Mask {
+  const mask = out ?? emptyMask(grid);
+  const w = grid.w;
+  const r2 = (radius + 0.5) * (radius + 0.5);
+  const blockedAt = (x: number, y: number) => isOpaque(cellAt(grid, x, y));
+
+  if (ox < 0 || oy < 0 || ox >= grid.w || oy >= grid.h) return mask;
+  mask[oy * w + ox] = 1;
+  if (radius <= 0) return mask;
+
+  for (const transform of QUADRANTS) {
+    const inRadius = (d: number, c: number) => d * d + c * c <= r2;
+    const wallAt = (d: number, c: number) => {
+      const [x, y] = transform(ox, oy, d, c);
+      return blockedAt(x, y);
+    };
+    // Corner rule: the extreme diagonal tile of a row is treated as blocked
+    // when both cells that share its inner corner are walls.
+    const cornerBlocked = (d: number, c: number) => {
+      if (Math.abs(c) !== d || d === 0) return false;
+      const inner = c > 0 ? c - 1 : c + 1;
+      return wallAt(d - 1, c) && wallAt(d, inner);
+    };
+    const isWall = (d: number, c: number) => wallAt(d, c) || cornerBlocked(d, c);
+    const reveal = (d: number, c: number) => {
+      if (!inRadius(d, c) || cornerBlocked(d, c)) return;
+      const [x, y] = transform(ox, oy, d, c);
+      if (x >= 0 && y >= 0 && x < grid.w && y < grid.h) mask[y * w + x] = 1;
+    };
+
+    // Slopes are rationals n/2 (Ford's "Fraction(2*col-1, 2*depth)" scaled by depth is
+    // handled by comparing col*den against depth*num). Store as [num, den].
+    const scan = (depth: number, startN: number, startD: number, endN: number, endD: number): void => {
+      if (depth > radius) return;
+      // min_col = round_ties_up(depth * start), max_col = round_ties_down(depth * end)
+      const minCol = Math.floor((2 * depth * startN + startD) / (2 * startD));
+      const maxCol = Math.ceil((2 * depth * endN - endD) / (2 * endD));
+      let prevWall: boolean | null = null;
+      let curStartN = startN, curStartD = startD;
+      for (let col = minCol; col <= maxCol; col++) {
+        const wall = isWall(depth, col);
+        // symmetric check: start <= col/depth <= end
+        const symmetric = col * curStartD >= depth * curStartN && col * endD <= depth * endN;
+        if (wall || symmetric) reveal(depth, col);
+        if (prevWall === true && !wall) {
+          // slope of this tile: (2*col - 1) / (2*depth)
+          curStartN = 2 * col - 1; curStartD = 2 * depth;
+        }
+        if (prevWall === false && wall) {
+          scan(depth + 1, curStartN, curStartD, 2 * col - 1, 2 * depth);
+        }
+        prevWall = wall;
       }
-      if (!blocked) visible.add(cellKey(tx, ty));
-    }
+      if (prevWall === false) scan(depth + 1, curStartN, curStartD, endN, endD);
+    };
+    scan(1, -1, 1, 1, 1);
   }
-  return visible;
+  return mask;
 }

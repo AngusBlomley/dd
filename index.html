@@ -37,8 +37,8 @@ body{
 
 /* ---------- Topbar ---------- */
 #topbar{
-  display:flex;align-items:center;gap:14px;
-  padding:10px 16px;
+  display:flex;align-items:center;gap:10px 14px;flex-wrap:wrap;
+  padding:8px 14px;
   background:linear-gradient(180deg,var(--stone-800),var(--stone-900));
   border-bottom:2px solid var(--panel-border);
   flex-shrink:0;
@@ -53,6 +53,7 @@ body{
 }
 .topbar-group{display:flex;gap:6px;align-items:center;}
 .spacer{flex:1;}
+.topbar-sep{width:1px;height:22px;background:var(--panel-border-lo);margin:0 4px;}
 .btn{
   background:var(--stone-700);
   border:1px solid var(--panel-border);
@@ -220,7 +221,13 @@ input[type=range]{width:100%;}
     <div class="spacer"></div>
     <div class="topbar-group">
       <button class="btn" id="btnUndo" title="Undo (Ctrl+Z)">&#8630; Undo</button>
-      <button class="btn toggle" id="btnDmPreview" title="Preview what players currently see, without leaving DM mode">Preview Lighting</button>
+      <span class="topbar-sep"></span>
+      <span class="hint" style="margin:0" title="DM-view overlays">Show:</span>
+      <button class="btn small toggle" id="btnOvLight" title="Shade unlit and dim cells in DM view">Light</button>
+      <button class="btn small toggle" id="btnOvParty" title="Tint the cells the party can see">Party</button>
+      <button class="btn small toggle" id="btnOvMonsters" title="Tint the cells monsters can see">Monsters</button>
+      <span class="topbar-sep"></span>
+      <button class="btn toggle" id="btnDmPreview" title="Preview what players currently see, without leaving DM mode">Preview</button>
       <button class="btn primary toggle" id="btnPlayerView">Player View</button>
     </div>
   </div>
@@ -254,7 +261,7 @@ input[type=range]{width:100%;}
           <div class="swatch" data-tool="door"><div class="chip prop-icon" style="background:#6b4a2c">&#128682;</div>Door</div>
           <div class="swatch" data-tool="eraser"><div class="chip" style="background:#111"></div>Erase</div>
         </div>
-        <div class="hint">Walls block movement, sight and light. Doors block sight only while closed — click a placed door on the map to toggle it open/closed.</div>
+        <div class="hint">Walls block movement, sight and light. Closed doors block sight and light — click a placed door on the map to toggle it open/closed.</div>
       </div>
 
       <div class="panel" id="panel-props">
@@ -290,14 +297,21 @@ input[type=range]{width:100%;}
             </select>
           </div>
         </div>
-        <label class="field">Vision Radius: <span id="visionVal">6</span> squares (30ft)</label>
-        <input type="range" id="newTokVision" min="0" max="20" value="6">
-        <div class="check-row"><input type="checkbox" id="newTokDark"><label for="newTokDark">Darkvision (sees in the dark, no light needed)</label></div>
+        <label class="field">Vision: <span id="visionVal">12 squares (60 ft)</span></label>
+        <input type="range" id="newTokVision" min="0" max="30" value="12">
+        <div class="hint">How far this token can see things that are lit.</div>
+        <label class="field">Darkvision</label>
+        <select id="newTokDark"></select>
+        <div class="hint">Sees unlit cells in greyscale out to this range. Drow and deep gnomes: 120 ft.</div>
         <div class="check-row"><input type="checkbox" id="newTokLight"><label for="newTokLight">Carries a light source</label></div>
         <div id="tokLightRadiusWrap" style="display:none">
-          <label class="field">Light Radius: <span id="lightVal">4</span> squares</label>
-          <input type="range" id="newTokLightRadius" min="1" max="12" value="4">
+          <label class="field">Bright: <span id="brightVal">4 sq (20 ft)</span></label>
+          <input type="range" id="newTokBright" min="0" max="12" value="4">
+          <label class="field">Dim (total reach): <span id="dimVal">8 sq (40 ft)</span></label>
+          <input type="range" id="newTokDim" min="0" max="24" value="8">
+          <div class="hint">Torch: 20 ft bright, 40 ft total. Hooded lantern: 30 / 60. Candle: 5 / 10.</div>
         </div>
+        <div class="check-row"><input type="checkbox" id="newTokHidden"><label for="newTokHidden">Hidden from players</label></div>
         <button class="btn primary full-btn" id="btnArmToken">Place on Map &#8594;</button>
         <div class="hint" id="armHint" style="display:none">Click a cell on the map to place this token.</div>
 
@@ -350,7 +364,7 @@ input[type=range]{width:100%;}
         <button class="btn full-btn" id="btnClearFog">Reset Explored Fog</button>
         <div class="hint">Forgets everywhere the party has already seen, so Player View starts fully dark again.</div>
         <div class="section-label">About Lighting</div>
-        <div class="hint">In Player View, cells are pitch black until a token's vision reaches them <i>and</i> they're lit — by a torch/prop, or by a token carrying light. Tokens with darkvision see within their radius even unlit. Previously-seen cells stay dimly visible as memory once vision moves away, like a real party's recollection of a room.</div>
+        <div class="hint">Player View shows what the <i>player characters</i> can see. NPCs and monsters never reveal anything. A cell is shown when a party member has line of sight to it and it is lit (bright, or dim shown darker), or it is within their darkvision (shown in greyscale). Cells seen before stay as dark memory, showing what was there when the party last looked, so changes made out of sight stay hidden. Toggle Light / Party sight / Monster sight in the top bar to see the same information on the DM map.</div>
       </div>
     </div>
 
@@ -361,7 +375,8 @@ input[type=range]{width:100%;}
         <button class="btn small" id="zoomOut">&minus;</button>
         <button class="btn small" id="zoomReset">100%</button>
         <button class="btn small" id="zoomIn">&plus;</button>
-        <button class="btn small toggle" id="btnPanTool" title="Pan tool (or hold Space)">&#9995; Pan</button>
+        <button class="btn small toggle" id="btnSelectTool" title="Select / move tokens (V). Esc deselects.">&#10132; Select</button>
+        <button class="btn small toggle" id="btnPanTool" title="Pan tool (H, or hold Space)">&#9995; Pan</button>
       </div>
     </div>
 

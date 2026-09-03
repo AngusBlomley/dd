@@ -1,12 +1,25 @@
 /* The map grid: a row-major array of cells. Pure data, no DOM. */
 
+/** What a cell looked like the last time the party saw it. */
+export interface CellMemory {
+  t: string;
+  w: boolean;
+  d: boolean;
+  doOpen: boolean;
+  p: string | null;
+}
+
 export interface Cell {
-  t: string;        // terrain id
-  w: boolean;       // wall
-  d: boolean;       // door
-  doOpen: boolean;  // door open
-  p: string | null; // prop id
-  ex: boolean;      // explored (fog memory)
+  t: string;                // terrain id
+  w: boolean;               // wall
+  d: boolean;               // door
+  doOpen: boolean;          // door open
+  p: string | null;         // prop id
+  mem: CellMemory | null;   // fog memory: null = never seen by the party
+}
+
+export function rememberCell(c: Cell): void {
+  c.mem = { t: c.t, w: c.w, d: c.d, doOpen: c.doOpen, p: c.p };
 }
 
 export interface Grid {
@@ -16,7 +29,7 @@ export interface Grid {
 }
 
 export function newCell(terrain: string = 'void'): Cell {
-  return { t: terrain, w: false, d: false, doOpen: false, p: null, ex: false };
+  return { t: terrain, w: false, d: false, doOpen: false, p: null, mem: null };
 }
 
 export function createGrid(w: number, h: number, fillTerrain: string = 'void'): Grid {
