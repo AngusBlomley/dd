@@ -16,8 +16,9 @@ export function effCell(): number {
 
 function resizeCanvas(): void {
   const cs = effCell();
-  canvas.width = state.grid.w * cs;
-  canvas.height = state.grid.h * cs;
+  const w = state.grid.w * cs, h = state.grid.h * cs;
+  if (canvas.width !== w) canvas.width = w;
+  if (canvas.height !== h) canvas.height = h;
 }
 
 /* Greyscale terrain colours for darkvision, precomputed once. */
@@ -32,24 +33,28 @@ const COLORS = {
   unseen: '#050403',
   wall: '#332a20',
   memoryOverlay: 'rgba(5,4,3,0.72)',
-  dimOverlay: 'rgba(5,4,3,0.32)',
   darkvisionOverlay: 'rgba(70,76,92,0.42)',
   ovDark: 'rgba(0,0,0,0.55)',
   ovDim: 'rgba(0,0,0,0.25)',
   ovParty: 'rgba(79,138,121,0.38)',
   ovMonster: 'rgba(161,58,45,0.38)',
   ovBoth: 'rgba(200,140,60,0.45)',
+  ovMemory: 'rgba(221,155,52,0.22)',
 };
 
-function drawCell(x: number, y: number, cs: number, grey: boolean, from?: CellMemory): void {
-  const c = from ?? cellAt(state.grid, x, y)!;
-  const px = x * cs, py = y * cs;
-  const terr = TERRAIN_MAP[c.t] || TERRAIN_MAP.void;
-  ctx.fillStyle = grey ? GREY[terr.id] : terr.color;
-  ctx.fillRect(px, py, cs, cs);
-  if ((x + y) % 2 === 0) { ctx.fillStyle = 'rgba(0,0,0,0.045)'; ctx.fillRect(px, py, cs, cs); }
+type Look = { t: string; w: boolean; d: boolean; doOpen: boolean; secret: boolean; p: string | null };
 
-  if (c.w) {
+/** Draws one cell. `playerSide` hides secret doors behind a wall face. */
+function drawCell(x: number, y: number, cs: number, grey: boolean, look: Look, playerSide: boolean): void {
+  const px = x * cs, py = y * cs;
+  const L = state.layers;
+  const terr = TERRAIN_MAP[look.t] || TERRAIN_MAP.void;
+  ctx.fillStyle = L.terrain ? (grey ? GREY[terr.id] : terr.color) : '#1a1613';
+  ctx.fillRect(px, py, cs, cs);
+  if (L.terrain && (x + y) % 2 === 0) { ctx.fillStyle = 'rgba(0,0,0,0.045)'; ctx.fillRect(px, py, cs, cs); }
+
+  const showAsWall = look.w || (look.d && look.secret && playerSide);
+  if (L.walls && showAsWall) {
     ctx.fillStyle = COLORS.wall;
     ctx.fillRect(px, py, cs, cs);
     ctx.strokeStyle = 'rgba(0,0,0,.35)';
@@ -57,19 +62,20 @@ function drawCell(x: number, y: number, cs: number, grey: boolean, from?: CellMe
     ctx.strokeRect(px + 1, py + 1, cs - 2, cs - 2);
     ctx.fillStyle = 'rgba(255,255,255,.04)';
     ctx.fillRect(px, py, cs, 3);
-  }
-  if (c.d) {
-    ctx.fillStyle = c.doOpen ? '#4a3a24' : '#6b4a2c';
+  } else if (L.walls && look.d) {
+    ctx.fillStyle = look.doOpen ? '#4a3a24' : '#6b4a2c';
     ctx.fillRect(px + cs * 0.12, py + cs * 0.12, cs * 0.76, cs * 0.76);
-    ctx.strokeStyle = '#2c1e10'; ctx.lineWidth = 2;
+    ctx.strokeStyle = look.secret ? '#e6d7ab' : '#2c1e10'; ctx.lineWidth = 2;
+    if (look.secret) ctx.setLineDash([3, 3]);
     ctx.strokeRect(px + cs * 0.12, py + cs * 0.12, cs * 0.76, cs * 0.76);
-    if (!c.doOpen) {
+    ctx.setLineDash([]);
+    if (!look.doOpen) {
       ctx.fillStyle = '#d8b25a';
       ctx.beginPath(); ctx.arc(px + cs * 0.78, py + cs * 0.5, Math.max(1.5, cs * 0.05), 0, 7); ctx.fill();
     }
   }
-  if (c.p) {
-    const pd = PROP_MAP[c.p];
+  if (L.props && look.p) {
+    const pd = PROP_MAP[look.p];
     if (pd) {
       ctx.font = Math.round(cs * 0.62) + 'px sans-serif';
       ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
@@ -96,30 +102,35 @@ export function render(): void {
     for (let x = 0; x < grid.w; x++) {
       const i = y * grid.w + x;
       const px = x * cs, py = y * cs;
+      const cell = grid.cells[i];
 
       if (playerSide) {
         const see = sc.party[i];
         if (see === UNSEEN) {
-          const mem = grid.cells[i].mem;
+          const mem: CellMemory | null = cell.mem;
           if (!mem) {
             ctx.fillStyle = COLORS.unseen;
             ctx.fillRect(px, py, cs, cs);
             continue;
           }
           // Memory shows the cell as it was last seen, not as it is now.
-          drawCell(x, y, cs, false, mem);
+          drawCell(x, y, cs, false, mem, true);
           overlay(x, y, cs, COLORS.memoryOverlay);
         } else {
-          drawCell(x, y, cs, see === SEEN_DARKVISION);
-          if (see === SEEN_DIM) overlay(x, y, cs, COLORS.dimOverlay);
-          else if (see === SEEN_DARKVISION) overlay(x, y, cs, COLORS.darkvisionOverlay);
+          drawCell(x, y, cs, see === SEEN_DARKVISION, cell, true);
+          if (see === SEEN_DIM) {
+            // smooth falloff through the dim band: brighter near the source
+            const a = 0.18 + 0.42 * (1 - Math.min(1, sc.intensity[i]));
+            overlay(x, y, cs, `rgba(5,4,3,${a.toFixed(3)})`);
+          } else if (see === SEEN_DARKVISION) overlay(x, y, cs, COLORS.darkvisionOverlay);
         }
       } else {
-        drawCell(x, y, cs, false);
+        drawCell(x, y, cs, false, cell, false);
         if (state.overlays.light) {
           if (sc.light[i] < DIM) overlay(x, y, cs, COLORS.ovDark);
-          else if (sc.light[i] < BRIGHT) overlay(x, y, cs, COLORS.ovDim);
+          else if (sc.light[i] < BRIGHT) overlay(x, y, cs, `rgba(0,0,0,${(0.1 + 0.35 * (1 - sc.intensity[i])).toFixed(3)})`);
         }
+        if (state.overlays.memory && cell.mem) overlay(x, y, cs, COLORS.ovMemory);
         const p = state.overlays.party && sc.party[i] > UNSEEN;
         const m = state.overlays.monsters && sc.monsters[i] > UNSEEN;
         if (p && m) overlay(x, y, cs, COLORS.ovBoth);
@@ -127,12 +138,15 @@ export function render(): void {
         else if (m) overlay(x, y, cs, COLORS.ovMonster);
       }
 
-      ctx.strokeStyle = 'rgba(0,0,0,.18)';
-      ctx.lineWidth = 1;
-      ctx.strokeRect(px + 0.5, py + 0.5, cs - 1, cs - 1);
+      if (state.layers.grid) {
+        ctx.strokeStyle = 'rgba(0,0,0,.18)';
+        ctx.lineWidth = 1;
+        ctx.strokeRect(px + 0.5, py + 0.5, cs - 1, cs - 1);
+      }
     }
   }
 
+  if (!state.layers.tokens && !playerSide) return;
   for (const tok of state.tokens) {
     if (playerSide && !tokenVisibleToParty(tok, sc.party, grid.w)) continue;
     const cx = tok.x * cs + cs / 2, cy = tok.y * cs + cs / 2;

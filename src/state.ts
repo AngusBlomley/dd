@@ -1,20 +1,32 @@
-/* Application state, undo stack and the scene cache.
+/* Application state, undo/redo and the scene cache.
    UI and render modules read and mutate this; the engine never imports it. */
 
 import type { Token } from './engine/data';
 import { createGrid, type Grid } from './engine/grid';
 import { computeScene, markExplored, type Scene } from './engine/lighting';
+import type { Campaign } from './store/json';
 
-export type ToolId = 'terrain' | 'wall' | 'door' | 'prop' | 'eraser' | 'select' | 'token' | 'pan';
+export type ToolId = 'terrain' | 'wall' | 'door' | 'secretdoor' | 'prop' | 'eraser' | 'select' | 'token' | 'pan';
 export type BrushMode = 'single' | 'rect';
 
 export interface Overlays {
   light: boolean;    // shade dark / dim cells in DM view
   party: boolean;    // tint cells the party can see
   monsters: boolean; // tint cells monsters can see
+  memory: boolean;   // tint cells the party has explored
+}
+
+export interface Layers {
+  terrain: boolean;
+  walls: boolean;
+  props: boolean;
+  tokens: boolean;
+  grid: boolean;
 }
 
 export interface AppState {
+  campaign: Campaign | null;
+  mapId: string | null;
   grid: Grid;
   tokens: Token[];
   nextTokenId: number;
@@ -25,13 +37,17 @@ export interface AppState {
   playerView: boolean;
   dmPreview: boolean;
   overlays: Overlays;
+  layers: Layers;
   zoom: number;
   baseCell: number;
   selectedTokenId: number | null;
   placingToken: boolean; // "Place on Map" armed; the form is read at click time
+  dirty: boolean;        // unsaved changes since the last autosave
 }
 
 export const state: AppState = {
+  campaign: null,
+  mapId: null,
   grid: createGrid(34, 24, 'stone'),
   tokens: [],
   nextTokenId: 1,
@@ -41,12 +57,24 @@ export const state: AppState = {
   brushMode: 'single',
   playerView: false,
   dmPreview: false,
-  overlays: { light: false, party: false, monsters: false },
+  overlays: { light: false, party: false, monsters: false, memory: false },
+  layers: { terrain: true, walls: true, props: true, tokens: true, grid: true },
   zoom: 1,
   baseCell: 28,
   selectedTokenId: null,
   placingToken: false,
+  dirty: false,
 };
+
+/* ---------- change notification ----------
+   Anything that edits the map calls markChanged(); listeners (autosave) subscribe. */
+const changeListeners: (() => void)[] = [];
+export function onChange(fn: () => void): void { changeListeners.push(fn); }
+export function markChanged(): void {
+  state.dirty = true;
+  invalidateScene();
+  for (const fn of changeListeners) fn();
+}
 
 /* ---------- scene cache ----------
    The scene is recomputed lazily after any change. Explored memory is updated
@@ -58,29 +86,27 @@ export function invalidateScene(): void { sceneCache = null; }
 export function scene(): Scene {
   if (!sceneCache) {
     sceneCache = computeScene(state.grid, state.tokens);
-    markExplored(state.grid, sceneCache.party);
+    if (markExplored(state.grid, sceneCache.party) > 0) {
+      state.dirty = true;
+      for (const fn of changeListeners) fn();
+    }
   }
   return sceneCache;
 }
 
-/* ---------- undo ---------- */
+/* ---------- undo / redo ---------- */
 interface Snapshot { grid: Grid; tokens: Token[]; nextTokenId: number }
 const undoStack: string[] = [];
-const MAX_UNDO = 25;
+const redoStack: string[] = [];
+const MAX_UNDO = 40;
 
 function snapshot(): string {
   const s: Snapshot = { grid: state.grid, tokens: state.tokens, nextTokenId: state.nextTokenId };
   return JSON.stringify(s);
 }
-export function pushUndo(): void {
-  undoStack.push(snapshot());
-  if (undoStack.length > MAX_UNDO) undoStack.shift();
-}
-/** Restores the previous snapshot. Explored memory is kept: undo is for edits, not for what the party has seen. */
-export function popUndo(): boolean {
-  const raw = undoStack.pop();
-  if (!raw) return false;
+function restore(raw: string): void {
   const snap = JSON.parse(raw) as Snapshot;
+  // Explored memory is kept: undo is for edits, not for what the party has seen.
   if (snap.grid.w === state.grid.w && snap.grid.h === state.grid.h) {
     for (let i = 0; i < snap.grid.cells.length; i++) snap.grid.cells[i].mem = state.grid.cells[i].mem;
   }
@@ -88,6 +114,30 @@ export function popUndo(): boolean {
   state.tokens = snap.tokens;
   state.nextTokenId = snap.nextTokenId;
   state.selectedTokenId = null;
-  invalidateScene();
+  markChanged();
+}
+export function pushUndo(): void {
+  undoStack.push(snapshot());
+  if (undoStack.length > MAX_UNDO) undoStack.shift();
+  redoStack.length = 0;
+}
+export function popUndo(): boolean {
+  const raw = undoStack.pop();
+  if (!raw) return false;
+  redoStack.push(snapshot());
+  restore(raw);
   return true;
 }
+export function popRedo(): boolean {
+  const raw = redoStack.pop();
+  if (!raw) return false;
+  undoStack.push(snapshot());
+  restore(raw);
+  return true;
+}
+export function clearHistory(): void {
+  undoStack.length = 0;
+  redoStack.length = 0;
+}
+export function canUndo(): boolean { return undoStack.length > 0; }
+export function canRedo(): boolean { return redoStack.length > 0; }

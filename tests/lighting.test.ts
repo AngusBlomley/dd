@@ -26,24 +26,30 @@ describe('light map', () => {
   it('a torch prop gives bright then dim light, then darkness', () => {
     const g = corridor(24);
     cellAt(g, 11, 1)!.p = 'torch';
-    const light = computeLightMap(g, collectLightSources(g, []));
+    const lm = computeLightMap(g, collectLightSources(g, []));
+    const light = lm.level;
     expect(at(light, g, 11, 1)).toBe(BRIGHT);
     expect(at(light, g, 15, 1)).toBe(BRIGHT); // 4 away
     expect(at(light, g, 16, 1)).toBe(DIM);    // 5 away
     expect(at(light, g, 19, 1)).toBe(DIM);    // 8 away
     expect(at(light, g, 20, 1)).toBe(DARK);   // 9 away
+    // intensity falls off smoothly through the dim band
+    expect(at(lm.intensity as any, g, 15, 1)).toBe(1);
+    expect(at(lm.intensity as any, g, 16, 1)).toBeGreaterThan(at(lm.intensity as any, g, 19, 1));
+    expect(at(lm.intensity as any, g, 19, 1)).toBeGreaterThan(0);
+    expect(at(lm.intensity as any, g, 20, 1)).toBe(0);
   });
 
   it('overlapping lights take the brightest', () => {
     const g = createGrid(20, 5, 'stone');
-    const light = computeLightMap(g, [{ x: 2, y: 2, bright: 2, dim: 10 }, { x: 8, y: 2, bright: 3, dim: 4 }]);
+    const light = computeLightMap(g, [{ x: 2, y: 2, bright: 2, dim: 10 }, { x: 8, y: 2, bright: 3, dim: 4 }]).level;
     expect(at(light, g, 6, 2)).toBe(BRIGHT); // dim from first, bright from second
   });
 
   it('walls stop light', () => {
     const g = createGrid(10, 3, 'stone');
     cellAt(g, 5, 1)!.w = true;
-    const light = computeLightMap(g, [{ x: 2, y: 1, bright: 8, dim: 8 }]);
+    const light = computeLightMap(g, [{ x: 2, y: 1, bright: 8, dim: 8 }]).level;
     expect(at(light, g, 5, 1)).toBe(BRIGHT); // the wall face is lit
     expect(at(light, g, 6, 1)).toBe(DARK);
   });
@@ -82,7 +88,7 @@ describe('party vision (spec section 4)', () => {
   it('a PC with a torch in a corridor sees 1-4 bright, 5-8 dim, 9 not at all', () => {
     const g = corridor(40);
     const pc = token({ x: 20, y: 1, vision: { radius: 12, darkvision: 0 }, light: { bright: 4, dim: 8 } });
-    const party = computeVision(g, [pc], computeLightMap(g, collectLightSources(g, [pc])));
+    const party = computeVision(g, [pc], computeLightMap(g, collectLightSources(g, [pc])).level);
     for (const dir of [1, -1]) {
       for (let d = 1; d <= 4; d++) expect(at(party, g, 20 + dir * d, 1), `bright at ${d}`).toBe(SEEN_BRIGHT);
       for (let d = 5; d <= 8; d++) expect(at(party, g, 20 + dir * d, 1), `dim at ${d}`).toBe(SEEN_DIM);
@@ -133,6 +139,17 @@ describe('party vision (spec section 4)', () => {
     expect(at(party, g, 2, 2)).toBe(SEEN_DARKVISION);
   });
 
+  it('a secret door blocks sight like a wall until opened', () => {
+    const g = corridor(30);
+    cellAt(g, 10, 1)!.p = 'torch';
+    const sd = cellAt(g, 14, 1)!;
+    sd.d = true; sd.secret = true; sd.doOpen = false;
+    const pc = token({ x: 12, y: 1 });
+    expect(at(computeScene(g, [pc]).party, g, 15, 1)).toBe(UNSEEN);
+    sd.doOpen = true;
+    expect(at(computeScene(g, [pc]).party, g, 15, 1)).toBe(SEEN_DIM);
+  });
+
   // Acceptance test 7
   it('opening a door extends light and sight through it; closing stops it', () => {
     const g = corridor(30);
@@ -172,7 +189,7 @@ describe('explored memory (spec acceptance test 6)', () => {
     const pc = token({ x: 3, y: 1, light: { bright: 3, dim: 3 } });
     markExplored(g, computeScene(g, [pc]).party);
     const seenCell = cellAt(g, 6, 1)!;
-    expect(seenCell.mem).toEqual({ t: 'stone', w: false, d: false, doOpen: false, p: null });
+    expect(seenCell.mem).toEqual({ t: 'stone', w: false, d: false, doOpen: false, p: null, secret: false });
 
     // party walks away, DM builds a wall and drops a chest where they used to be
     pc.x = 25;

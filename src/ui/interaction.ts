@@ -1,27 +1,33 @@
-/* Mouse and keyboard interaction with the map canvas: painting, token
-   placement and dragging, panning, zoom, view-mode and overlay toggles, undo. */
+/* Pointer and keyboard interaction with the map canvas: painting, token
+   placement and dragging, panning, pinch and wheel zoom, view-mode toggles,
+   undo and redo. Works for mouse, pen and touch through pointer events. */
 
 import type { Token } from '../engine/data';
 import { cellAt, inBounds } from '../engine/grid';
-import { canvas, effCell, requestRender } from '../render/canvas';
-import { invalidateScene, popUndo, pushUndo, state, type Overlays } from '../state';
+import { canvas, effCell, render, requestRender } from '../render/canvas';
+import { markChanged, popRedo, popUndo, pushUndo, state, type Overlays } from '../state';
 import { $ } from './dom';
 import { setStatus } from './status';
 import { cancelPlacing, readTokenForm, renderInspector, renderTokenList } from './tokens';
 
 const wrap = $('canvas-wrap');
+const MIN_ZOOM = 0.35, MAX_ZOOM = 3;
 
 let painting = false;
 let rectStart: { x: number; y: number } | null = null;
 let draggingToken: Token | null = null;
-let panDragging = false;
+let panning = false;
 let panStart = { x: 0, y: 0 };
 let scrollStart = { l: 0, t: 0 };
 
-function eventToCell(e: MouseEvent): { x: number; y: number } {
+// active pointers for pinch
+const pointers = new Map<number, { x: number; y: number }>();
+let pinch: { dist: number; zoom: number; cx: number; cy: number } | null = null;
+
+function clientToCell(clientX: number, clientY: number): { x: number; y: number } {
   const rect = canvas.getBoundingClientRect();
   const cs = effCell();
-  return { x: Math.floor((e.clientX - rect.left) / cs), y: Math.floor((e.clientY - rect.top) / cs) };
+  return { x: Math.floor((clientX - rect.left) / cs), y: Math.floor((clientY - rect.top) / cs) };
 }
 
 function tokenAtCell(x: number, y: number): Token | null {
@@ -36,10 +42,11 @@ function applyToolAtCell(x: number, y: number): void {
   if (!c) return;
   switch (state.tool) {
     case 'terrain': c.t = state.selectedTerrain; c.w = false; break;
-    case 'wall': c.w = true; c.d = false; c.p = null; break;
-    case 'door': c.d = true; c.doOpen = false; c.w = false; c.p = null; break;
-    case 'prop': c.p = state.selectedProp; c.w = false; c.d = false; break;
-    case 'eraser': c.w = false; c.d = false; c.p = null; break;
+    case 'wall': c.w = true; c.d = false; c.secret = false; c.p = null; break;
+    case 'door': c.d = true; c.secret = false; c.doOpen = false; c.w = false; c.p = null; break;
+    case 'secretdoor': c.d = true; c.secret = true; c.doOpen = false; c.w = false; c.p = null; break;
+    case 'prop': c.p = state.selectedProp; c.w = false; c.d = false; c.secret = false; break;
+    case 'eraser': c.w = false; c.d = false; c.secret = false; c.doOpen = false; c.p = null; break;
   }
 }
 
@@ -47,10 +54,8 @@ function refreshAll(): void {
   renderInspector(); renderTokenList(); requestRender(); setStatus();
 }
 
-export function undo(): void {
-  if (!popUndo()) return;
-  refreshAll();
-}
+export function undo(): void { if (popUndo()) refreshAll(); }
+export function redo(): void { if (popRedo()) refreshAll(); }
 
 function selectToken(tok: Token | null): void {
   state.selectedTokenId = tok ? tok.id : null;
@@ -69,21 +74,67 @@ function placeTokenAt(x: number, y: number): void {
   };
   state.tokens.push(tok);
   state.selectedTokenId = tok.id;
-  invalidateScene();
+  markChanged();
   refreshAll();
 }
 
-function onMouseDown(e: MouseEvent): void {
-  if (e.button === 1 || state.tool === 'pan') {
-    panDragging = true; panStart = { x: e.clientX, y: e.clientY };
+/* ---------- zoom ---------- */
+
+/** Sets zoom keeping the map point under (clientX, clientY) fixed on screen. */
+export function setZoom(zoom: number, clientX?: number, clientY?: number): void {
+  const z = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, zoom));
+  if (z === state.zoom) return;
+  const wrapRect = wrap.getBoundingClientRect();
+  const ax = clientX === undefined ? wrapRect.width / 2 : clientX - wrapRect.left;
+  const ay = clientY === undefined ? wrapRect.height / 2 : clientY - wrapRect.top;
+  const oldCs = effCell();
+  const mapX = (wrap.scrollLeft + ax) / oldCs, mapY = (wrap.scrollTop + ay) / oldCs;
+  state.zoom = z;
+  render(); // synchronous so the new canvas size is in layout before we scroll
+  const cs = effCell();
+  wrap.scrollLeft = mapX * cs - ax;
+  wrap.scrollTop = mapY * cs - ay;
+  $('zoomReset').textContent = Math.round(state.zoom * 100) + '%';
+}
+
+/* ---------- pointer handlers ---------- */
+
+function startPan(clientX: number, clientY: number): void {
+  panning = true; panStart = { x: clientX, y: clientY };
+  scrollStart = { l: wrap.scrollLeft, t: wrap.scrollTop };
+  canvas.classList.add('panning');
+}
+
+function cancelStroke(): void {
+  painting = false; rectStart = null; draggingToken = null;
+}
+
+function onPointerDown(e: PointerEvent): void {
+  canvas.setPointerCapture(e.pointerId);
+  pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+
+  if (pointers.size === 2) {
+    // second finger: switch to pinch / two-finger pan, abandon any single-finger action
+    cancelStroke();
+    panning = false; canvas.classList.remove('panning');
+    const [a, b] = [...pointers.values()];
+    pinch = { dist: Math.hypot(a.x - b.x, a.y - b.y), zoom: state.zoom, cx: (a.x + b.x) / 2, cy: (a.y + b.y) / 2 };
     scrollStart = { l: wrap.scrollLeft, t: wrap.scrollTop };
-    canvas.classList.add('panning');
+    e.preventDefault();
+    return;
+  }
+  if (pointers.size > 2) return;
+
+  const touchPans = e.pointerType === 'touch' && (state.playerView || state.tool === 'pan');
+  if (e.button === 1 || state.tool === 'pan' || touchPans) {
+    startPan(e.clientX, e.clientY);
     e.preventDefault();
     return;
   }
   if (e.button !== 0) return;
-  const { x, y } = eventToCell(e);
+  const { x, y } = clientToCell(e.clientX, e.clientY);
   if (!inBounds(state.grid, x, y)) return;
+  if (state.playerView) return; // no editing from the player side
 
   if (state.tool === 'select') {
     const tok = tokenAtCell(x, y);
@@ -97,9 +148,12 @@ function onMouseDown(e: MouseEvent): void {
     if (state.placingToken) placeTokenAt(x, y);
     return;
   }
-  if (state.tool === 'door') {
-    const c = cellAt(state.grid, x, y)!;
-    if (c.d) { pushUndo(); c.doOpen = !c.doOpen; invalidateScene(); requestRender(); return; }
+  const c = cellAt(state.grid, x, y)!;
+  if (state.tool === 'door' && c.d) {
+    pushUndo(); c.doOpen = !c.doOpen; markChanged(); requestRender(); return;
+  }
+  if (state.tool === 'secretdoor' && c.d && c.secret) {
+    pushUndo(); c.secret = false; markChanged(); requestRender(); return; // reveal
   }
 
   painting = true;
@@ -107,44 +161,63 @@ function onMouseDown(e: MouseEvent): void {
   else {
     pushUndo();
     applyToolAtCell(x, y);
-    invalidateScene();
+    markChanged();
     requestRender();
   }
 }
 
-function onMouseMove(e: MouseEvent): void {
-  const { x, y } = eventToCell(e);
+function onPointerMove(e: PointerEvent): void {
+  if (pointers.has(e.pointerId)) pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+
+  if (pinch && pointers.size >= 2) {
+    const [a, b] = [...pointers.values()];
+    const dist = Math.hypot(a.x - b.x, a.y - b.y);
+    const cx = (a.x + b.x) / 2, cy = (a.y + b.y) / 2;
+    setZoom(pinch.zoom * (dist / pinch.dist), cx, cy);
+    wrap.scrollLeft -= cx - pinch.cx;
+    wrap.scrollTop -= cy - pinch.cy;
+    pinch.cx = cx; pinch.cy = cy;
+    e.preventDefault();
+    return;
+  }
+
+  const { x, y } = clientToCell(e.clientX, e.clientY);
   $('hover-coord').textContent = inBounds(state.grid, x, y) ? 'x:' + x + '  y:' + y : '—';
 
-  if (panDragging) {
+  if (panning) {
     wrap.scrollLeft = scrollStart.l - (e.clientX - panStart.x);
     wrap.scrollTop = scrollStart.t - (e.clientY - panStart.y);
     return;
   }
   if (draggingToken) {
     if (inBounds(state.grid, x, y) && (draggingToken.x !== x || draggingToken.y !== y)) {
-      draggingToken.x = x; draggingToken.y = y; invalidateScene(); requestRender();
+      draggingToken.x = x; draggingToken.y = y; markChanged(); requestRender();
     }
     return;
   }
   if (painting && state.brushMode === 'single' && inBounds(state.grid, x, y)) {
     applyToolAtCell(x, y);
-    invalidateScene();
+    markChanged();
     requestRender();
   }
 }
 
-function onMouseUp(e: MouseEvent): void {
-  if (panDragging) { panDragging = false; canvas.classList.remove('panning'); return; }
+function onPointerUp(e: PointerEvent): void {
+  pointers.delete(e.pointerId);
+  if (pinch) {
+    if (pointers.size < 2) pinch = null;
+    return;
+  }
+  if (panning) { panning = false; canvas.classList.remove('panning'); return; }
   if (draggingToken) { draggingToken = null; return; }
   if (painting && state.brushMode === 'rect' && rectStart) {
-    const { x, y } = eventToCell(e);
+    const { x, y } = clientToCell(e.clientX, e.clientY);
     if (inBounds(state.grid, x, y)) {
       pushUndo();
       const x0 = Math.min(rectStart.x, x), x1 = Math.max(rectStart.x, x);
       const y0 = Math.min(rectStart.y, y), y1 = Math.max(rectStart.y, y);
       for (let yy = y0; yy <= y1; yy++) for (let xx = x0; xx <= x1; xx++) applyToolAtCell(xx, yy);
-      invalidateScene();
+      markChanged();
       requestRender();
     }
     rectStart = null;
@@ -164,14 +237,24 @@ function isTypingInField(): boolean {
 }
 
 export function initInteraction(): void {
-  canvas.addEventListener('mousedown', onMouseDown);
-  window.addEventListener('mousemove', onMouseMove);
-  window.addEventListener('mouseup', onMouseUp);
+  canvas.addEventListener('pointerdown', onPointerDown);
+  canvas.addEventListener('pointermove', onPointerMove);
+  canvas.addEventListener('pointerup', onPointerUp);
+  canvas.addEventListener('pointercancel', onPointerUp);
   canvas.addEventListener('contextmenu', e => e.preventDefault());
+
+  // trackpad pinch and ctrl+wheel zoom; plain wheel scrolls the map as usual
+  wrap.addEventListener('wheel', (e) => {
+    if (!e.ctrlKey && !e.metaKey) return;
+    e.preventDefault();
+    setZoom(state.zoom * Math.exp(-e.deltaY * 0.0025), e.clientX, e.clientY);
+  }, { passive: false });
 
   let spaceHeld = false;
   window.addEventListener('keydown', (e) => {
-    if ((e.ctrlKey || e.metaKey) && e.key === 'z') { e.preventDefault(); undo(); return; }
+    const mod = e.ctrlKey || e.metaKey;
+    if (mod && (e.key === 'z' || e.key === 'Z')) { e.preventDefault(); if (e.shiftKey) redo(); else undo(); return; }
+    if (mod && (e.key === 'y' || e.key === 'Y')) { e.preventDefault(); redo(); return; }
     if (e.key === 'Escape') {
       if (state.tool === 'token') { cancelPlacing(); state.tool = 'select'; }
       selectToken(null);
@@ -183,22 +266,24 @@ export function initInteraction(): void {
     if (e.code === 'Space' && !spaceHeld) { spaceHeld = true; canvas.classList.add('tool-pan'); e.preventDefault(); }
     if (e.key === 'v' || e.key === 'V') setTool('select');
     if (e.key === 'h' || e.key === 'H') setTool(state.tool === 'pan' ? 'terrain' : 'pan');
+    if (e.key === '=' || e.key === '+') setZoom(state.zoom * 1.15);
+    if (e.key === '-' || e.key === '_') setZoom(state.zoom / 1.15);
   });
   window.addEventListener('keyup', (e) => {
     if (e.code === 'Space') { spaceHeld = false; if (state.tool !== 'pan') canvas.classList.remove('tool-pan'); }
   });
 
   $('btnUndo').addEventListener('click', undo);
+  $('btnRedo').addEventListener('click', redo);
   $('btnSelectTool').addEventListener('click', () => setTool(state.tool === 'select' ? 'terrain' : 'select'));
   $('btnPanTool').addEventListener('click', () => setTool(state.tool === 'pan' ? 'terrain' : 'pan'));
 }
 
 export function initZoomAndViews(): void {
-  const label = () => { $('zoomReset').textContent = Math.round(state.zoom * 100) + '%'; };
-  $('zoomIn').addEventListener('click', () => { state.zoom = Math.min(2.4, state.zoom + 0.15); label(); requestRender(); });
-  $('zoomOut').addEventListener('click', () => { state.zoom = Math.max(0.4, state.zoom - 0.15); label(); requestRender(); });
-  $('zoomReset').addEventListener('click', () => { state.zoom = 1; label(); requestRender(); });
-  label();
+  $('zoomIn').addEventListener('click', () => setZoom(state.zoom * 1.15));
+  $('zoomOut').addEventListener('click', () => setZoom(state.zoom / 1.15));
+  $('zoomReset').addEventListener('click', () => setZoom(1));
+  $('zoomReset').textContent = '100%';
 
   $('btnPlayerView').addEventListener('click', (e) => {
     state.playerView = !state.playerView;

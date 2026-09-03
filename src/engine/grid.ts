@@ -7,6 +7,7 @@ export interface CellMemory {
   d: boolean;
   doOpen: boolean;
   p: string | null;
+  secret: boolean;
 }
 
 export interface Cell {
@@ -14,12 +15,9 @@ export interface Cell {
   w: boolean;               // wall
   d: boolean;               // door
   doOpen: boolean;          // door open
+  secret: boolean;          // secret door: looks like a wall to players until revealed
   p: string | null;         // prop id
   mem: CellMemory | null;   // fog memory: null = never seen by the party
-}
-
-export function rememberCell(c: Cell): void {
-  c.mem = { t: c.t, w: c.w, d: c.d, doOpen: c.doOpen, p: c.p };
 }
 
 export interface Grid {
@@ -29,7 +27,11 @@ export interface Grid {
 }
 
 export function newCell(terrain: string = 'void'): Cell {
-  return { t: terrain, w: false, d: false, doOpen: false, p: null, mem: null };
+  return { t: terrain, w: false, d: false, doOpen: false, secret: false, p: null, mem: null };
+}
+
+export function rememberCell(c: Cell): void {
+  c.mem = { t: c.t, w: c.w, d: c.d, doOpen: c.doOpen, p: c.p, secret: c.secret };
 }
 
 export function createGrid(w: number, h: number, fillTerrain: string = 'void'): Grid {
@@ -59,4 +61,8 @@ export function resizeGrid(grid: Grid, w: number, h: number): Grid {
     }
   }
   return { w, h, cells };
+}
+
+export function cloneGrid(grid: Grid): Grid {
+  return JSON.parse(JSON.stringify(grid));
 }

@@ -1,9 +1,11 @@
 /* The lighting and vision model from docs/SPEC.md section 4.
 
    Light map:   every cell is DARK, DIM or BRIGHT, from props and tokens that emit light.
+                An intensity value (0..1) alongside gives the renderer a smooth falloff
+                through the dim band; the levels are what the rules use.
    Vision:      each viewer casts FOV; a cell it can see resolves to a SeeLevel from the
                 light there and the viewer's vision / darkvision radii.
-   Party vision is the union over party tokens only. Monsters never contribute. */
+   Party vision is the union over player characters only. Nothing else contributes. */
 
 import { PROP_MAP, type Token } from './data';
 import { computeFov, emptyMask } from './fov';
@@ -34,9 +36,15 @@ export function collectLightSources(grid: Grid, tokens: Token[]): LightSource[] 
   return out;
 }
 
-/** One LightLevel per cell. Overlapping lights take the brightest. */
-export function computeLightMap(grid: Grid, sources: LightSource[]): Uint8Array {
-  const light = new Uint8Array(grid.w * grid.h);
+export interface LightMap {
+  level: Uint8Array;        // LightLevel per cell
+  intensity: Float32Array;  // 1 inside bright, fading to ~0 at the dim edge; 0 in the dark
+}
+
+/** Light per cell. Overlapping lights take the brightest. */
+export function computeLightMap(grid: Grid, sources: LightSource[]): LightMap {
+  const level = new Uint8Array(grid.w * grid.h);
+  const intensity = new Float32Array(grid.w * grid.h);
   const fov = emptyMask(grid);
   for (const s of sources) {
     const reach = Math.max(s.bright, s.dim);
@@ -44,15 +52,20 @@ export function computeLightMap(grid: Grid, sources: LightSource[]): Uint8Array 
     fov.fill(0);
     computeFov(grid, s.x, s.y, reach, fov);
     const b2 = (s.bright + 0.5) * (s.bright + 0.5);
+    const dimSpan = Math.max(0.5, reach - s.bright);
     for (let i = 0; i < fov.length; i++) {
       if (!fov[i]) continue;
       const x = i % grid.w, y = (i - x) / grid.w;
       const dx = x - s.x, dy = y - s.y;
-      const level = dx * dx + dy * dy <= b2 ? BRIGHT : DIM;
-      if (level > light[i]) light[i] = level;
+      const d2 = dx * dx + dy * dy;
+      const lv = d2 <= b2 ? BRIGHT : DIM;
+      if (lv > level[i]) level[i] = lv;
+      const dist = Math.sqrt(d2);
+      const t = lv === BRIGHT ? 1 : Math.max(0.08, 1 - (dist - s.bright) / (dimSpan + 0.5));
+      if (t > intensity[i]) intensity[i] = t;
     }
   }
-  return light;
+  return { level, intensity };
 }
 
 /** Only player characters count toward what the players see. */
@@ -81,29 +94,31 @@ export function computeVision(grid: Grid, viewers: Token[], light: Uint8Array): 
       const x = i % grid.w, y = (i - x) / grid.w;
       const dx = x - v.x, dy = y - v.y;
       const dist2 = dx * dx + dy * dy;
-      let level: number = UNSEEN;
-      if (light[i] === BRIGHT && dist2 <= v2) level = SEEN_BRIGHT;
-      else if (light[i] === DIM && dist2 <= v2) level = SEEN_DIM;
-      else if (dist2 <= d2) level = SEEN_DARKVISION;
-      if (level > seen[i]) seen[i] = level;
+      let lvl: number = UNSEEN;
+      if (light[i] === BRIGHT && dist2 <= v2) lvl = SEEN_BRIGHT;
+      else if (light[i] === DIM && dist2 <= v2) lvl = SEEN_DIM;
+      else if (dist2 <= d2) lvl = SEEN_DARKVISION;
+      if (lvl > seen[i]) seen[i] = lvl;
     }
   }
   return seen;
 }
 
 export interface Scene {
-  light: Uint8Array;     // LightLevel per cell
-  party: Uint8Array;     // SeeLevel per cell, party tokens only
-  monsters: Uint8Array;  // SeeLevel per cell, monster tokens only (DM overlay)
+  light: Uint8Array;        // LightLevel per cell
+  intensity: Float32Array;  // smooth light falloff for rendering
+  party: Uint8Array;        // SeeLevel per cell, player characters only
+  monsters: Uint8Array;     // SeeLevel per cell, monster tokens only (DM overlay)
 }
 
 /** Pure: computes the whole scene without touching the grid. */
 export function computeScene(grid: Grid, tokens: Token[]): Scene {
-  const light = computeLightMap(grid, collectLightSources(grid, tokens));
+  const lm = computeLightMap(grid, collectLightSources(grid, tokens));
   return {
-    light,
-    party: computeVision(grid, tokens.filter(isPartyToken), light),
-    monsters: computeVision(grid, tokens.filter(t => t.type === 'monster'), light),
+    light: lm.level,
+    intensity: lm.intensity,
+    party: computeVision(grid, tokens.filter(isPartyToken), lm.level),
+    monsters: computeVision(grid, tokens.filter(t => t.type === 'monster'), lm.level),
   };
 }
 
@@ -129,4 +144,3 @@ export function tokenVisibleToParty(t: Token, party: Uint8Array, gridW: number):
   if (isPartyToken(t)) return true;
   return party[t.y * gridW + t.x] > UNSEEN;
 }
-

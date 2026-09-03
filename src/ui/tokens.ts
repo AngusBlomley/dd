@@ -4,7 +4,7 @@ import {
   DARKVISION_OPTIONS, DEFAULT_TOKEN_LIGHT, TOKEN_TYPE_COLORS, type Token, type TokenType,
 } from '../engine/data';
 import { requestRender } from '../render/canvas';
-import { invalidateScene, pushUndo, state } from '../state';
+import { markChanged, pushUndo, state } from '../state';
 import { $, escapeHtml } from './dom';
 import { setStatus } from './status';
 
@@ -79,7 +79,7 @@ export function deleteToken(id: number): void {
   pushUndo();
   state.tokens = state.tokens.filter(t => t.id !== id);
   if (state.selectedTokenId === id) state.selectedTokenId = null;
-  invalidateScene();
+  markChanged();
   renderTokenList(); renderInspector(); requestRender(); setStatus();
 }
 
@@ -178,7 +178,7 @@ export function renderInspector(): void {
       : null;
     tok.hidden = f<HTMLInputElement>('insHidden').checked;
     syncLabels();
-    invalidateScene();
+    markChanged();
     renderTokenList();
     requestRender();
   };

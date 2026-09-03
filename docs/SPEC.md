@@ -1,6 +1,6 @@
 # Cartographer's Table — Spec & Roadmap
 
-_Version 0.2 — 3 Sep 2026. Drafted from the prototype-1 HTML and the planning call; updated with the DM's answers to the open questions. Status: Phase 0 done, Phase 1 done._
+_Version 0.3 — 3 Sep 2026. Drafted from the prototype-1 HTML and the planning call; updated with the DM's answers to the open questions. Status: Phases 0, 1 and 2 done._
 
 ## 1. What we are building
 
@@ -151,7 +151,7 @@ The single HTML file mixes state, rules, rendering and DOM handlers in one closu
 | UI | Vanilla DOM + Canvas 2D (Preact is allowed for panels if they get fiddly) | Prototype 1 is already this; no framework tax on phones. |
 | Tests | Vitest | Runs engine tests headless. Lighting acceptance tests live here. |
 | Realtime | Supabase Realtime (Broadcast + Presence) | No server code to write or host. Free tier covers 8 people forever. Room code = channel name. |
-| Local persistence | IndexedDB via `idb-keyval` | Handles campaigns of many maps without the 5 MB localStorage ceiling. |
+| Local persistence | IndexedDB via `idb-keyval`, one record per campaign, autosave | Handles campaigns of many maps without the 5 MB localStorage ceiling. |
 | Hosting | GitHub Pages (Vercel is equivalent) | Static files only. Note: Vercel serverless functions cannot hold WebSockets, so Vercel alone would not have solved sync either. |
 
 **Alternatives considered for realtime**
@@ -257,15 +257,18 @@ Phases are ordered by what the DM asked for: lighting first, then editor quality
 - Unit tests for the seven acceptance cases in §4.
 - **Done when:** the DM can run a room-by-room reveal on the tablet with Player View and it looks right every time.
 
-### Phase 2 — Editor and campaigns (medium)
+### Phase 2 — Editor and campaigns (medium) — done
 
 - Layer panel with all toggles (R10).
 - Campaign > Maps, IndexedDB autosave, campaign JSON export/import (R11, R12).
 - Touch support: pointer events, pinch zoom, two-finger pan (B7).
 - Underdark terrain and props pack, hidden tokens, secret doors (R15–R17).
-- Cave generator (R18).
-- Undo/redo (R14).
+- Cave generator (R18): cellular automata, single connected cavern, Underdark dressing.
+- Undo/redo (R14), 40 steps, redo on Ctrl+Shift+Z / Ctrl+Y.
+- Smooth light falloff through the dim band (Q2).
+- Secret doors: look like a wall to players until revealed.
 - **Done when:** the DM has prepared the first Out of the Abyss chapter as a campaign with several maps and can switch between them.
+- _Note:_ persistence is one IndexedDB record per campaign, autosaved 600 ms after the last change and on page unload. Phase 0/1 single-map saves are folded into a "Saved maps" campaign on first launch.
 
 ### Phase 3 — Prototype 3: play together (medium–large)
 
@@ -289,7 +292,7 @@ Backlog items in §3.6, in whatever order the table asks for them.
 ## 7. Open questions for the DM — answered 3 Sep 2026
 
 1. **NPC vision.** Only PCs count. NPCs never contribute to what players see. _Applied: R3, R17, §4._
-2. **Dim light.** Three levels: lit, dim, dark. Lit has a restricted radius that falls off to dim and then dark. _Applied: R4. The engine uses bright and dim radii per light; a smoother visual gradient between the bands is a rendering polish item for Phase 2._
+2. **Dim light.** Three levels: lit, dim, dark. Lit has a restricted radius that falls off to dim and then dark. _Applied: R4. The engine uses bright and dim radii per light and the renderer fades smoothly through the dim band._
 3. **Player names on tokens.** Colours and initials only. _Applied: R17._
 4. **Memory fog.** Players see explored areas, but changes made in areas they have explored and can no longer see are not visible to them. _Applied: R6 and §4; memory is a snapshot._
 5. **Room persistence.** A "waiting for the DM" screen while the tablet reconnects is fine. _Applied: §5.4._

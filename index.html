@@ -94,7 +94,7 @@ body{
 }
 .tabs{display:flex;flex-wrap:wrap;background:var(--stone-950);border-bottom:1px solid var(--panel-border-lo);}
 .tab{
-  flex:1 1 33%;text-align:center;padding:8px 2px;font-size:11.5px;
+  flex:1 1 25%;text-align:center;padding:8px 2px;font-size:11.5px;
   cursor:pointer;color:var(--parchment-dim);border-bottom:2px solid transparent;
   user-select:none;
 }
@@ -144,7 +144,7 @@ input[type=range]{width:100%;}
   background-image:radial-gradient(rgba(255,255,255,.02) 1px,transparent 1px);
   background-size:22px 22px;
 }
-#mapCanvas{display:block;image-rendering:pixelated;cursor:crosshair;}
+#mapCanvas{display:block;image-rendering:pixelated;cursor:crosshair;touch-action:none;}
 #mapCanvas.tool-pan{cursor:grab;}
 #mapCanvas.tool-pan.panning{cursor:grabbing;}
 #mapCanvas.tool-select{cursor:pointer;}
@@ -199,6 +199,20 @@ input[type=range]{width:100%;}
 }
 .saved-map-row .smname{font-size:13px;}
 .saved-map-row .smbtns{display:flex;gap:6px;}
+.swatch-group-label{font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--parchment-dim);margin:10px 0 5px;}
+.swatch-group-label:first-child{margin-top:0;}
+.map-row{padding:7px 9px;border:1px solid var(--panel-border-lo);border-radius:3px;margin-bottom:5px;cursor:pointer;background:var(--stone-800);}
+.map-row:hover{border-color:var(--amber);}
+.map-row.active{border-color:var(--amber-hi);background:#3a2c17;}
+.map-row .map-name{font-size:12.5px;}
+.map-meta{font-size:10.5px;color:var(--parchment-dim);margin-top:2px;}
+.campaign-head .campaign-name{font-family:var(--font-display);font-size:15px;color:var(--parchment);margin-bottom:8px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.saved-map-row.active{border-color:var(--amber-hi);}
+#statSave{font-size:11px;}
+#statSave.saving{color:var(--parchment-dim);}
+#statSave.saved{color:var(--ok);}
+#statSave.error{color:var(--danger);font-weight:700;}
+#btnCampaignName{max-width:280px;overflow:hidden;text-overflow:ellipsis;}
 ::-webkit-scrollbar{width:10px;height:10px;}
 ::-webkit-scrollbar-track{background:var(--stone-950);}
 ::-webkit-scrollbar-thumb{background:var(--stone-700);border-radius:5px;border:2px solid var(--stone-950);}
@@ -210,17 +224,14 @@ input[type=range]{width:100%;}
   <div id="topbar">
     <h1>&#9876;&#65039; Cartographer's Table</h1>
     <div class="topbar-group">
-      <button class="btn" id="btnNewMap">New Map</button>
-      <button class="btn" id="btnSave">Save</button>
-      <button class="btn" id="btnLoad">Load</button>
-      <button class="btn" id="btnExportPng">Export PNG</button>
-      <button class="btn" id="btnExportJson">Export JSON</button>
-      <button class="btn" id="btnImportJson">Import JSON</button>
+      <button class="btn" id="btnCampaignName" title="Campaign › map. Click to switch campaigns.">Campaign</button>
+      <button class="btn" id="btnExportPng" title="Download the current view as a PNG">Export PNG</button>
       <input type="file" id="fileImport" accept=".json" style="display:none">
     </div>
     <div class="spacer"></div>
     <div class="topbar-group">
       <button class="btn" id="btnUndo" title="Undo (Ctrl+Z)">&#8630; Undo</button>
+      <button class="btn" id="btnRedo" title="Redo (Ctrl+Shift+Z)">&#8631; Redo</button>
       <span class="topbar-sep"></span>
       <span class="hint" style="margin:0" title="DM-view overlays">Show:</span>
       <button class="btn small toggle" id="btnOvLight" title="Shade unlit and dim cells in DM view">Light</button>
@@ -240,12 +251,14 @@ input[type=range]{width:100%;}
         <div class="tab" data-panel="props">Props</div>
         <div class="tab" data-panel="tokens">Tokens</div>
         <div class="tab" data-panel="generate">Generate</div>
+        <div class="tab" data-panel="maps">Maps</div>
+        <div class="tab" data-panel="layers">Layers</div>
         <div class="tab" data-panel="mapsettings">Map</div>
       </div>
 
       <div class="panel active" id="panel-terrain">
         <div class="section-label">Paint Background</div>
-        <div class="swatch-grid" id="terrainSwatches"></div>
+        <div id="terrainSwatches"></div>
         <div class="section-label">Brush</div>
         <div class="row2">
           <button class="btn small" id="brushSingle">Single Cell</button>
@@ -259,15 +272,16 @@ input[type=range]{width:100%;}
         <div class="swatch-grid">
           <div class="swatch" data-tool="wall"><div class="chip" style="background:#4a4038;background-image:linear-gradient(135deg,#5a4f45,#2c2620)"></div>Wall</div>
           <div class="swatch" data-tool="door"><div class="chip prop-icon" style="background:#6b4a2c">&#128682;</div>Door</div>
+          <div class="swatch" data-tool="secretdoor"><div class="chip prop-icon" style="background:#4a4038;border:1px dashed #e6d7ab">&#128682;</div>Secret Door</div>
           <div class="swatch" data-tool="eraser"><div class="chip" style="background:#111"></div>Erase</div>
         </div>
-        <div class="hint">Walls block movement, sight and light. Closed doors block sight and light — click a placed door on the map to toggle it open/closed.</div>
+        <div class="hint">Walls block movement, sight and light. Closed doors block sight and light; click a placed door with the Door tool to open or close it. A secret door looks like a wall to players until you click it with the Secret Door tool to reveal it.</div>
       </div>
 
       <div class="panel" id="panel-props">
         <div class="section-label">Place Prop</div>
-        <div class="swatch-grid" id="propSwatches"></div>
-        <div class="hint">Torches and any prop marked "light" cast illumination. Pillars &amp; statues block sight like a thin wall.</div>
+        <div id="propSwatches"></div>
+        <div class="hint">Hover a prop for its light radius or whether it blocks sight and movement.</div>
       </div>
 
       <div class="panel" id="panel-tokens">
@@ -327,20 +341,21 @@ input[type=range]{width:100%;}
         </div>
         <label class="field">Theme</label>
         <select id="genTheme">
-          <option value="stone">Dungeon (stone)</option>
+          <option value="underdark" selected>Underdark cavern</option>
           <option value="cave">Cave (natural)</option>
-          <option value="crypt">Crypt (dark stone)</option>
+          <option value="stone">Dungeon (stone)</option>
+          <option value="crypt">Crypt (tiled)</option>
           <option value="wood">Keep (wood floors)</option>
         </select>
-        <label class="field">Room Count: <span id="genRoomsVal">10</span></label>
+        <label class="field"><span id="genRoomsLabel">Room Count</span>: <span id="genRoomsVal">10</span></label>
         <input type="range" id="genRooms" min="3" max="24" value="10">
-        <div class="row2">
+        <div class="row2" id="genRoomSizeRow">
           <div><label class="field">Min Room Size</label><input type="number" id="genRoomMin" value="4" min="3" max="12"></div>
           <div><label class="field">Max Room Size</label><input type="number" id="genRoomMax" value="9" min="3" max="20"></div>
         </div>
-        <label class="field">Pillar Density</label>
+        <label class="field" id="genPillarsLabel">Pillar Density</label>
         <select id="genPillars"><option value="0">None</option><option value="0.15">Sparse</option><option value="0.35" selected>Normal</option><option value="0.6">Dense</option></select>
-        <label class="field">Torch Density</label>
+        <label class="field" id="genTorchesLabel">Torch Density</label>
         <select id="genTorches"><option value="0">None</option><option value="0.2">Sparse</option><option value="0.45" selected>Normal</option><option value="0.7">Dense</option></select>
         <div class="row2">
           <div><label class="field">Stairs Up</label><input type="number" id="genStairsUp" value="1" min="0" max="5"></div>
@@ -349,7 +364,47 @@ input[type=range]{width:100%;}
         <label class="field">Seed (optional — reuse for the same layout)</label>
         <input type="text" id="genSeed" placeholder="leave blank for random">
         <button class="btn primary full-btn" id="btnGenerate">&#127922; Generate Dungeon</button>
-        <div class="hint">Generating replaces the current layout (walls, floors, doors &amp; props). Existing tokens are kept in place.</div>
+        <div class="hint">Generating replaces the current map's layout (walls, floors, doors &amp; props). Existing tokens are kept in place. Undo brings the old layout back.</div>
+      </div>
+
+      <div class="panel" id="panel-maps">
+        <div class="section-label">Campaign</div>
+        <div class="campaign-head">
+          <div class="campaign-name" id="campaignNameLabel">—</div>
+          <div class="row2">
+            <button class="btn small" id="btnRenameCampaign">Rename</button>
+            <button class="btn small" id="btnCampaigns">Switch / manage</button>
+          </div>
+        </div>
+        <div class="hint">Everything saves automatically on this device. Use Switch / manage to export a campaign as a backup or move it to another device.</div>
+        <div class="section-label">Maps in this campaign</div>
+        <div id="mapList"></div>
+        <button class="btn primary full-btn" id="btnNewMap">+ New Map</button>
+        <div class="row2" style="margin-top:8px">
+          <button class="btn small" id="btnDuplicateMap">Duplicate</button>
+          <button class="btn small" id="btnRenameMap">Rename</button>
+        </div>
+        <div class="row2" style="margin-top:8px">
+          <button class="btn small" id="btnExportMap">Export map</button>
+          <button class="btn small" id="btnImportMap">Import map</button>
+        </div>
+        <button class="btn small danger full-btn" id="btnDeleteMap">Delete this map</button>
+      </div>
+
+      <div class="panel" id="panel-layers">
+        <div class="section-label">Map layers</div>
+        <div class="check-row"><input type="checkbox" id="lyTerrain" checked><label for="lyTerrain">Terrain</label></div>
+        <div class="check-row"><input type="checkbox" id="lyWalls" checked><label for="lyWalls">Walls &amp; doors</label></div>
+        <div class="check-row"><input type="checkbox" id="lyProps" checked><label for="lyProps">Props</label></div>
+        <div class="check-row"><input type="checkbox" id="lyTokens" checked><label for="lyTokens">Tokens</label></div>
+        <div class="check-row"><input type="checkbox" id="lyGrid" checked><label for="lyGrid">Grid lines</label></div>
+        <div class="hint">Hiding a layer only changes what you see while editing. Painting always goes to the layer the active tool belongs to.</div>
+        <div class="section-label">DM overlays</div>
+        <div class="check-row"><input type="checkbox" id="lyLight"><label for="lyLight">Light: shade dark and dim cells</label></div>
+        <div class="check-row"><input type="checkbox" id="lyParty"><label for="lyParty">Party sight: what the players can see now</label></div>
+        <div class="check-row"><input type="checkbox" id="lyMonsters"><label for="lyMonsters">Monster sight: what monsters can see now</label></div>
+        <div class="check-row"><input type="checkbox" id="lyMemory"><label for="lyMemory">Fog memory: everywhere the party has explored</label></div>
+        <div class="hint">Overlays only show in DM view. Player View and Preview always show exactly what the players get.</div>
       </div>
 
       <div class="panel" id="panel-mapsettings">
@@ -363,8 +418,6 @@ input[type=range]{width:100%;}
         <div class="section-label">Fog Memory</div>
         <button class="btn full-btn" id="btnClearFog">Reset Explored Fog</button>
         <div class="hint">Forgets everywhere the party has already seen, so Player View starts fully dark again.</div>
-        <div class="section-label">About Lighting</div>
-        <div class="hint">Player View shows what the <i>player characters</i> can see. NPCs and monsters never reveal anything. A cell is shown when a party member has line of sight to it and it is lit (bright, or dim shown darker), or it is within their darkvision (shown in greyscale). Cells seen before stay as dark memory, showing what was there when the party last looked, so changes made out of sight stay hidden. Toggle Light / Party sight / Monster sight in the top bar to see the same information on the DM map.</div>
       </div>
     </div>
 
@@ -391,27 +444,22 @@ input[type=range]{width:100%;}
     <span>Map: <b id="statSize">—</b></span>
     <span>Tokens: <b id="statTokens">0</b></span>
     <span>View: <b id="statView">DM</b></span>
+    <span class="spacer"></span>
+    <span id="statSave" class="saved">Saved</span>
   </div>
 </div>
 
-<div class="modal-overlay hidden" id="modalSave">
+<div class="modal-overlay hidden" id="modalCampaigns">
   <div class="modal-box">
-    <h2>Save Map</h2>
-    <label class="field">Map Name</label>
-    <input type="text" id="saveNameInput" placeholder="e.g. Goblin Warren, Level 1">
-    <div class="modal-actions">
-      <button class="btn" id="saveCancelBtn">Cancel</button>
-      <button class="btn primary" id="saveConfirmBtn">Save</button>
+    <h2>Campaigns</h2>
+    <div id="campaignList"></div>
+    <div class="row2" style="margin-top:12px">
+      <button class="btn primary" id="btnNewCampaign">+ New campaign</button>
+      <button class="btn" id="btnImportCampaign">Import campaign…</button>
     </div>
-  </div>
-</div>
-
-<div class="modal-overlay hidden" id="modalLoad">
-  <div class="modal-box">
-    <h2>Load Map</h2>
-    <div id="savedMapsList"></div>
+    <button class="btn full-btn" id="btnExportCampaign">Export current campaign (JSON backup)</button>
     <div class="modal-actions">
-      <button class="btn" id="loadCancelBtn">Close</button>
+      <button class="btn" id="campaignsCloseBtn">Close</button>
     </div>
   </div>
 </div>

@@ -1,24 +1,35 @@
-/* Generator panel, map settings (resize, clear fog), new map. */
+/* Generator panel, map settings (resize, clear fog), layers panel. */
 
-import { generateDungeon } from '../engine/generator';
-import { createGrid, resizeGrid } from '../engine/grid';
+import { generateDungeon, type GeneratorOptions } from '../engine/generator';
+import { resizeGrid } from '../engine/grid';
 import { requestRender } from '../render/canvas';
-import { invalidateScene, pushUndo, state } from '../state';
+import { markChanged, pushUndo, state, type Layers, type Overlays } from '../state';
 import { $ } from './dom';
 import { setStatus } from './status';
-import { renderInspector, renderTokenList } from './tokens';
+import { renderTokenList } from './tokens';
 
 const num = (id: string) => parseInt($<HTMLInputElement>(id).value, 10);
 
+function syncGeneratorLabels(): void {
+  const theme = $<HTMLSelectElement>('genTheme').value;
+  const cave = theme === 'cave' || theme === 'underdark';
+  $('genRoomsLabel').textContent = cave ? 'Openness' : 'Room Count';
+  $('genRoomSizeRow').style.display = cave ? 'none' : '';
+  $('genPillarsLabel').textContent = cave ? 'Stalagmites & mushrooms' : 'Pillar Density';
+  $('genTorchesLabel').textContent = cave ? 'Glowing fungi & crystals' : 'Torch Density';
+}
+
 export function initGeneratorPanel(): void {
   $('genRooms').addEventListener('input', (e) => { $('genRoomsVal').textContent = (e.target as HTMLInputElement).value; });
+  $('genTheme').addEventListener('change', syncGeneratorLabels);
+  syncGeneratorLabels();
   $('btnGenerate').addEventListener('click', () => {
     pushUndo();
     const roomMin = num('genRoomMin');
-    state.grid = generateDungeon({
+    const opts: GeneratorOptions = {
       w: num('genW'),
       h: num('genH'),
-      theme: $<HTMLSelectElement>('genTheme').value,
+      theme: $<HTMLSelectElement>('genTheme').value as GeneratorOptions['theme'],
       roomCount: num('genRooms'),
       roomMin,
       roomMax: Math.max(roomMin, num('genRoomMax')),
@@ -27,9 +38,10 @@ export function initGeneratorPanel(): void {
       stairsUp: num('genStairsUp'),
       stairsDown: num('genStairsDown'),
       seed: $<HTMLInputElement>('genSeed').value.trim(),
-    });
+    };
+    state.grid = generateDungeon(opts);
     state.tokens.forEach(t => { t.x = Math.min(t.x, state.grid.w - 1); t.y = Math.min(t.y, state.grid.h - 1); });
-    invalidateScene();
+    markChanged();
     requestRender(); setStatus();
   });
 }
@@ -41,23 +53,49 @@ export function initMapSettings(): void {
     pushUndo();
     state.grid = resizeGrid(state.grid, w, h);
     state.tokens = state.tokens.filter(t => t.x < w && t.y < h);
-    invalidateScene();
+    markChanged();
     requestRender(); setStatus(); renderTokenList();
   });
 
   $('btnClearFog').addEventListener('click', () => {
     pushUndo();
     state.grid.cells.forEach(c => { c.mem = null; });
-    invalidateScene();
+    markChanged();
     requestRender();
   });
+}
 
-  $('btnNewMap').addEventListener('click', () => {
-    if (!confirm('Start a new blank map? Unsaved changes will be lost unless you Save first.')) return;
-    pushUndo();
-    state.grid = createGrid(34, 24, 'stone');
-    state.tokens = []; state.selectedTokenId = null;
-    invalidateScene();
-    requestRender(); setStatus(); renderTokenList(); renderInspector();
-  });
+const LAYER_BOXES: { id: string; key: keyof Layers }[] = [
+  { id: 'lyTerrain', key: 'terrain' },
+  { id: 'lyWalls', key: 'walls' },
+  { id: 'lyProps', key: 'props' },
+  { id: 'lyTokens', key: 'tokens' },
+  { id: 'lyGrid', key: 'grid' },
+];
+const OVERLAY_BOXES: { id: string; key: keyof Overlays }[] = [
+  { id: 'lyLight', key: 'light' },
+  { id: 'lyParty', key: 'party' },
+  { id: 'lyMonsters', key: 'monsters' },
+  { id: 'lyMemory', key: 'memory' },
+];
+
+export function initLayersPanel(): void {
+  for (const b of LAYER_BOXES) {
+    $<HTMLInputElement>(b.id).addEventListener('change', (e) => {
+      state.layers[b.key] = (e.target as HTMLInputElement).checked;
+      requestRender(); setStatus();
+    });
+  }
+  for (const b of OVERLAY_BOXES) {
+    $<HTMLInputElement>(b.id).addEventListener('change', (e) => {
+      state.overlays[b.key] = (e.target as HTMLInputElement).checked;
+      requestRender(); setStatus();
+    });
+  }
+}
+
+/** Called from setStatus so the checkboxes follow the top-bar buttons and vice versa. */
+export function syncLayersPanel(): void {
+  for (const b of LAYER_BOXES) $<HTMLInputElement>(b.id).checked = state.layers[b.key];
+  for (const b of OVERLAY_BOXES) $<HTMLInputElement>(b.id).checked = state.overlays[b.key];
 }
