@@ -63,8 +63,9 @@ export function findPath(grid: Grid, x0: number, y0: number, x1: number, y1: num
       const ni = ny * w + nx;
       if (prev[ni] !== -2) continue;
       if (!ok(nx, ny)) continue;
-      // corner rule: a diagonal step needs at least one open orthogonal neighbour
-      if (dx && dy && !isPassable(grid, cx + dx, cy) && !isPassable(grid, cx, cy + dy)) continue;
+      // corner rule: a diagonal step needs at least one open orthogonal neighbour,
+      // and creatures count as obstacles here just like walls (no slipping between two enemies)
+      if (dx && dy && !ok(cx + dx, cy) && !ok(cx, cy + dy)) continue;
       prev[ni] = cur; dist[ni] = dist[cur] + 1;
       queue.push(ni);
     }

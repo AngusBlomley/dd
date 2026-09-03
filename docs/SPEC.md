@@ -37,6 +37,7 @@ Taken from the call. **Must** = needed before the group uses it at the table. **
 ### 3.1 Lighting and vision — Must (the "key thing")
 
 - R1. In Player View a cell is drawn only if a party member has line of sight to it **and** it is lit, or it is within a party member's darkvision range.
+- R1a. Every character can always see the cells next to it, even in total darkness (shown in greyscale like darkvision), so a party with no light is never completely blind. Issue #3.
 - R2. Monsters, NPCs and hidden objects are invisible until they stand on a cell the party can currently see. They never reveal themselves.
 - R3. Party vision is shared: what any PC sees, every player sees. Only player characters count; NPCs and monsters never reveal anything. Per-player "hardcore" vision is a later mode.
 - R4. Light sources have a bright radius and a dim radius (5e: torch 20 ft bright / 20 ft further dim). Bright, dim, darkvision-only and unseen render distinctly.
@@ -75,7 +76,7 @@ Taken from the call. **Must** = needed before the group uses it at the table. **
 
 ### 3.5 Turns and player movement — Later (Prototype 4)
 
-- R26. The DM marks whose turn it is. Only that player can drag their own token. Movement is blocked by walls, closed doors, blocking props and other characters, and players can only path through cells they can see or remember.
+- R26. The DM marks whose turn it is. Only that player can drag their own token. Movement is blocked by walls, closed doors, blocking props and other characters, and players can only path through cells they can see or remember. A character can never pass through another creature's cell or slip diagonally between two of them. Issue #4.
 - R27. Movement budget per turn (default 30 ft, 5 ft per cell, diagonals cost one cell); the player's top bar shows what is left. A "Next turn" button cycles through assigned players in join order. Three modes: DM moves everyone, turn-based, or free movement.
 - R28. When a player is assigned a character, or their character changes map, their screen centres on it; a Find Me button recentres at any time. The Session tab's character dropdowns always include tokens placed after the tab was opened.
 

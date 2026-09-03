@@ -68,6 +68,37 @@ describe('findPath', () => {
   });
 });
 
+describe('enemies block movement (issue #4)', () => {
+  it('an enemy in a corridor cannot be walked through', () => {
+    const g = createGrid(6, 3, 'stone');
+    for (let x = 0; x < 6; x++) { cellAt(g, x, 0)!.w = true; cellAt(g, x, 2)!.w = true; }
+    const me = pc(1, 1, 1);
+    const enemy = { ...pc(2, 2, 1), type: 'monster' as const };
+    const rules = { mode: 'free' as const, turnTokenId: null, movementLeft: null };
+    expect(validateMove(g, [me, enemy], me, 3, 1, rules, anywhere)).toEqual({ ok: false, reason: 'no-path' });
+    expect(validateMove(g, [me, enemy], me, 2, 1, rules, anywhere)).toEqual({ ok: false, reason: 'blocked' });
+  });
+
+  it('cannot slip diagonally between two enemies', () => {
+    const g = createGrid(4, 4, 'stone');
+    const me = pc(1, 1, 1);
+    const a = { ...pc(2, 2, 1), type: 'monster' as const };
+    const b = { ...pc(3, 1, 2), type: 'monster' as const };
+    expect(findPath(g, 1, 1, 2, 2, { blockers: [me, a, b], selfId: 1, allowed: (x, y) => x <= 2 && y <= 2 })).toBeNull();
+    // with one of them gone the diagonal opens up
+    expect(findPath(g, 1, 1, 2, 2, { blockers: [me, a], selfId: 1, allowed: (x, y) => x <= 2 && y <= 2 })!.length).toBe(1);
+  });
+
+  it('routes around an enemy in the open rather than through it', () => {
+    const g = createGrid(7, 5, 'stone');
+    const me = pc(1, 1, 2);
+    const enemy = { ...pc(2, 3, 2), type: 'monster' as const };
+    const path = findPath(g, 1, 2, 5, 2, { blockers: [me, enemy], selfId: 1 })!;
+    expect(path.some(c => c.x === 3 && c.y === 2)).toBe(false);
+    expect(path.length).toBe(4);
+  });
+});
+
 describe('validateMove (spec R26)', () => {
   const g = createGrid(12, 3, 'stone');
   for (let x = 0; x < 12; x++) { cellAt(g, x, 0)!.w = true; cellAt(g, x, 2)!.w = true; }

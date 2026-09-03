@@ -167,6 +167,33 @@ describe('party vision (spec section 4)', () => {
   });
 });
 
+describe('touch range (issue #3)', () => {
+  it('a PC with no light and no darkvision still sees the cells next to it', () => {
+    const g = createGrid(11, 11, 'stone');
+    const pc = token({ x: 5, y: 5, vision: { radius: 12, darkvision: 0 } });
+    const scene = computeScene(g, [pc]);
+    expect(at(scene.party, g, 5, 5)).toBe(SEEN_DARKVISION);
+    expect(at(scene.party, g, 6, 5)).toBe(SEEN_DARKVISION);
+    expect(at(scene.party, g, 4, 4)).toBe(SEEN_DARKVISION); // diagonal neighbour
+    expect(at(scene.party, g, 7, 5)).toBe(UNSEEN);            // two away: still dark
+  });
+
+  it('touch range respects walls: you feel the wall, not what is behind it', () => {
+    const g = createGrid(5, 3, 'stone');
+    cellAt(g, 2, 1)!.w = true;
+    const pc = token({ x: 1, y: 1, vision: { radius: 12, darkvision: 0 } });
+    const scene = computeScene(g, [pc]);
+    expect(at(scene.party, g, 2, 1)).toBe(SEEN_DARKVISION);
+    expect(at(scene.party, g, 3, 1)).toBe(UNSEEN);
+  });
+
+  it('does not shrink real darkvision', () => {
+    const g = createGrid(30, 3, 'stone');
+    const pc = token({ x: 5, y: 1, vision: { radius: 30, darkvision: 12 } });
+    expect(at(computeScene(g, [pc]).party, g, 17, 1)).toBe(SEEN_DARKVISION);
+  });
+});
+
 describe('explored memory (spec acceptance test 6)', () => {
   it('computeScene never writes to the grid; markExplored is the only writer', () => {
     const g = createGrid(12, 12, 'stone');

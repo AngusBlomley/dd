@@ -73,17 +73,20 @@ export function isPartyToken(t: Token): boolean {
   return t.type === 'pc';
 }
 
+/** Cells within this distance of a viewer are always seen, even in darkness (you can feel the walls). */
+export const TOUCH_RANGE = 1;
+
 /**
  * SeeLevel per cell for a set of viewers, given the light map.
  * Bright light within vision radius -> SEEN_BRIGHT; dim -> SEEN_DIM;
- * darkness within darkvision radius -> SEEN_DARKVISION.
+ * darkness within darkvision radius, or within touch range -> SEEN_DARKVISION.
  */
 export function computeVision(grid: Grid, viewers: Token[], light: Uint8Array): Uint8Array {
   const seen = new Uint8Array(grid.w * grid.h);
   const fov = emptyMask(grid);
   for (const v of viewers) {
     const vision = Math.max(0, v.vision.radius);
-    const dark = Math.max(0, v.vision.darkvision);
+    const dark = Math.max(TOUCH_RANGE, v.vision.darkvision);
     const reach = Math.max(vision, dark);
     fov.fill(0);
     computeFov(grid, v.x, v.y, reach, fov);
