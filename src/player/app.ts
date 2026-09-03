@@ -202,11 +202,31 @@ function closeLoot(): void {
   $('pLoot').hidden = true;
 }
 
+/** Why the player cannot move right now, or null if they can. */
+function cannotMoveReason(): string | null {
+  if (!assignment || assignment.tokenId === null) return 'You have no character yet.';
+  if (assignment.canMove) return null;
+  if (assignment.mode === 'dm') return 'The DM moves the characters right now.';
+  if (assignment.mode === 'turn') return assignment.turnName ? "It is " + assignment.turnName + "'s turn." : 'Waiting for the DM to start turns.';
+  return 'You cannot move right now.';
+}
+
 function requestMove(x: number, y: number): void {
   const t = myToken();
-  if (!t || !assignment?.canMove) return;
+  if (!t) return;
+  const why = cannotMoveReason();
+  if (why) { toast(why); return; }
   if (t.x === x && t.y === y) return;
   transport?.send({ type: 'move', tokenId: t.id, x, y });
+}
+
+/** Tap on your own character: arms tap-to-move (issue #19), or explains why you cannot move (issue #20). */
+function tapOwnToken(): void {
+  const why = cannotMoveReason();
+  if (why) { picking = false; toast(why); requestPaint(); return; }
+  picking = !picking;
+  toast(picking ? 'Now tap where to go. Tap your character again to cancel.' : 'Cancelled.');
+  requestPaint();
 }
 
 function initGestures(): void {
@@ -214,6 +234,7 @@ function initGestures(): void {
   let pinch: { dist: number; zoom: number; cx: number; cy: number } | null = null;
   let pan: { x: number; y: number; l: number; t: number } | null = null;
   let dragging: { startX: number; startY: number; moved: boolean } | null = null;
+  const WOBBLE = 10; // px a finger may drift and still count as a tap
 
   canvas.addEventListener('pointerdown', (e) => {
     try { canvas.setPointerCapture(e.pointerId); } catch { /* synthetic or already-released pointer */ }
@@ -225,9 +246,10 @@ function initGestures(): void {
     } else if (pointers.size === 1) {
       const cell = cellAtClient(e.clientX, e.clientY);
       const t = myToken();
-      if (assignment?.canMove && t && cell && cell.x === t.x && cell.y === t.y) {
+      if (t && cell && cell.x === t.x && cell.y === t.y) {
+        // your own character: a tap arms tap-to-move, a drag moves it (when allowed)
         dragging = { startX: e.clientX, startY: e.clientY, moved: false };
-        dragActive = true;
+        dragActive = !!assignment?.canMove;
       } else if (picking && cell) {
         picking = false; moveTarget = null; requestPaint();
         requestMove(cell.x, cell.y);
@@ -246,9 +268,9 @@ function initGestures(): void {
       wrap.scrollLeft -= cx - pinch.cx; wrap.scrollTop -= cy - pinch.cy;
       pinch.cx = cx; pinch.cy = cy;
     } else if (dragging) {
-      if (Math.hypot(e.clientX - dragging.startX, e.clientY - dragging.startY) > 6) dragging.moved = true;
+      if (Math.hypot(e.clientX - dragging.startX, e.clientY - dragging.startY) > WOBBLE) dragging.moved = true;
       const cell = cellAtClient(e.clientX, e.clientY);
-      if (dragging.moved && cell && (!moveTarget || moveTarget.x !== cell.x || moveTarget.y !== cell.y)) { moveTarget = cell; requestPaint(); }
+      if (dragActive && dragging.moved && cell && (!moveTarget || moveTarget.x !== cell.x || moveTarget.y !== cell.y)) { moveTarget = cell; requestPaint(); }
     } else if (pan) {
       wrap.scrollLeft = pan.l - (e.clientX - pan.x);
       wrap.scrollTop = pan.t - (e.clientY - pan.y);
@@ -259,8 +281,11 @@ function initGestures(): void {
     if (pointers.size < 2) pinch = null;
     if (dragging) {
       const cell = cellAtClient(e.clientX, e.clientY);
-      if (dragging.moved && cell) requestMove(cell.x, cell.y);
-      else { picking = !picking; }          // a tap on your own token arms tap-to-move
+      const t = myToken();
+      const releasedOnSelf = !!(cell && t && cell.x === t.x && cell.y === t.y);
+      const cancelled = e.type === 'pointercancel';
+      if (!cancelled && dragging.moved && cell && !releasedOnSelf) requestMove(cell.x, cell.y);
+      else if (!cancelled) tapOwnToken();   // a tap (even a slightly wobbly one) on your own character
       dragging = null; moveTarget = null; dragActive = false; requestPaint();
     }
     if (pan && pointers.size === 0) {
