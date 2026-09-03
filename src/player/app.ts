@@ -2,7 +2,7 @@
    and (when the DM allows) move your own character. */
 
 import { PROP_MAP } from '../engine/data';
-import { paintMap } from '../render/canvas';
+import { fitCanvasToScreen, paintMap } from '../render/canvas';
 import type { Layers } from '../state';
 import { PeerClient } from '../net/peerTransport';
 import { applyPatch, normalizeCode, type Assignment, type HostMessage, type MapView, type MoveDenial } from '../net/protocol';
@@ -80,9 +80,7 @@ function paint(): void {
   if (!view) return;
   if (!fitted) { fitToScreen(); fitted = true; }
   const cs = cellSize();
-  const wpx = view.w * cs, hpx = view.h * cs;
-  if (canvas.width !== wpx) canvas.width = wpx;
-  if (canvas.height !== hpx) canvas.height = hpx;
+  fitCanvasToScreen(canvas, ctx, view.w * cs, view.h * cs);
   const v = view;
   const mine = assignment?.tokenId ?? null;
   if (intensityF.length !== v.intensity.length) intensityF = new Float32Array(v.intensity.length);
@@ -251,6 +249,16 @@ function initGestures(): void {
   let pinch: { dist: number; zoom: number; cx: number; cy: number } | null = null;
   let pan: { x: number; y: number; l: number; t: number } | null = null;
   let dragging: { startX: number; startY: number; moved: boolean } | null = null;
+  let pinchFrame: number | null = null;
+  let pinchNext: { zoom: number; cx: number; cy: number } | null = null;
+  const applyPinch = () => {
+    pinchFrame = null;
+    if (!pinch || !pinchNext) return;
+    const { zoom: z, cx, cy } = pinchNext;
+    setZoom(z, cx, cy);
+    wrap.scrollLeft -= cx - pinch.cx; wrap.scrollTop -= cy - pinch.cy;
+    pinch.cx = cx; pinch.cy = cy;
+  };
   const WOBBLE = 10; // px a finger may drift and still count as a tap
 
   canvas.addEventListener('pointerdown', (e) => {
@@ -280,10 +288,8 @@ function initGestures(): void {
     if (pointers.has(e.pointerId)) pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
     if (pinch && pointers.size >= 2) {
       const [a, b] = [...pointers.values()];
-      const cx = (a.x + b.x) / 2, cy = (a.y + b.y) / 2;
-      setZoom(pinch.zoom * (Math.hypot(a.x - b.x, a.y - b.y) / pinch.dist), cx, cy);
-      wrap.scrollLeft -= cx - pinch.cx; wrap.scrollTop -= cy - pinch.cy;
-      pinch.cx = cx; pinch.cy = cy;
+      pinchNext = { zoom: pinch.zoom * (Math.hypot(a.x - b.x, a.y - b.y) / pinch.dist), cx: (a.x + b.x) / 2, cy: (a.y + b.y) / 2 };
+      if (pinchFrame === null) pinchFrame = requestAnimationFrame(applyPinch);
     } else if (dragging) {
       if (Math.hypot(e.clientX - dragging.startX, e.clientY - dragging.startY) > WOBBLE) dragging.moved = true;
       const cell = cellAtClient(e.clientX, e.clientY);

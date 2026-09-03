@@ -125,9 +125,24 @@ function overlay(c: CanvasRenderingContext2D, x: number, y: number, cs: number, 
   c.fillRect(x * cs, y * cs, cs, cs);
 }
 
+/**
+ * Sizes a canvas so it is drawn at the screen's real resolution (issue #23):
+ * the backing store is cssW × dpr, the element stays cssW in CSS pixels, and
+ * the context is scaled so all drawing stays in CSS pixel units.
+ */
+export function fitCanvasToScreen(cv: HTMLCanvasElement, c: CanvasRenderingContext2D, cssW: number, cssH: number): void {
+  const dpr = Math.max(1, Math.min(4, window.devicePixelRatio || 1));
+  const bw = Math.round(cssW * dpr), bh = Math.round(cssH * dpr);
+  if (cv.width !== bw) cv.width = bw;
+  if (cv.height !== bh) cv.height = bh;
+  if (cv.style.width !== cssW + 'px') cv.style.width = cssW + 'px';
+  if (cv.style.height !== cssH + 'px') cv.style.height = cssH + 'px';
+  c.setTransform(dpr, 0, 0, dpr, 0, 0);
+}
+
 export function paintMap(o: PaintOptions): void {
   const { ctx: c, cs, w, h } = o;
-  c.imageSmoothingEnabled = false;
+  c.imageSmoothingEnabled = true;
   c.clearRect(0, 0, w * cs, h * cs);
 
   // which way a door's wall runs, from its neighbours (walls, or what the viewer remembers as walls)
@@ -272,9 +287,7 @@ export function initialsOf(name: string): string {
 export function render(): void {
   const cs = effCell();
   const grid = state.grid;
-  const wpx = grid.w * cs, hpx = grid.h * cs;
-  if (canvas.width !== wpx) canvas.width = wpx;
-  if (canvas.height !== hpx) canvas.height = hpx;
+  fitCanvasToScreen(canvas, ctx, grid.w * cs, grid.h * cs);
   const sc = scene();
   const playerSide = state.playerView || state.dmPreview;
   const cells = grid.cells;

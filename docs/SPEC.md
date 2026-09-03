@@ -93,6 +93,7 @@ Taken from the call. **Must** = needed before the group uses it at the table. **
 - R26a. A player can open or close a door next to their character by tapping it, in any movement mode; closed secret doors still read as walls. Issue #8.
 - R27. Movement budget per turn (default 30 ft, 5 ft per cell, diagonals cost one cell); the player's top bar shows what is left. A "Next turn" button cycles through assigned players in join order. Three modes: DM moves everyone, turn-based, or free movement.
 - R28. When a player is assigned a character, or their character changes map, their screen centres on it; a Find Me button recentres at any time. The Session tab's character dropdowns always include tokens placed after the tab was opened.
+- R30. Both maps draw at the screen's real pixel density (up to 4x) with smoothing on, so phones and tablets get a crisp map; pinch-zoom repaints at most once per frame. Issue #23.
 - R29. On touch screens, tapping your own character arms tap-to-move ("Now tap where to go"), the next tap on a cell moves there, and tapping the character again cancels. A wobbly finger still counts as a tap. When movement is not allowed the tap says why (the DM moves the characters, or whose turn it is). Issues #19, #20.
 
 ### 3.6 Backlog — Later / maybe
