@@ -5,6 +5,7 @@
 import type { Token } from '../engine/data';
 import { cellAt, inBounds } from '../engine/grid';
 import { PREFAB_MAP, rotatePrefab, stampPrefab } from '../engine/prefabs';
+import { clearRegion, moveRegion, normalizeRect, rectArea, rectContains } from '../engine/region';
 import { canvas, effCell, render, requestRender } from '../render/canvas';
 import { markChanged, popRedo, popUndo, pushUndo, state, type Overlays } from '../state';
 import { $ } from './dom';
@@ -18,6 +19,8 @@ let painting = false;
 let rectStart: { x: number; y: number } | null = null;
 let draggingToken: Token | null = null;
 let draggingProp: { x: number; y: number } | null = null; // a prop being moved with the Select tool
+let marqueeStart: { x: number; y: number } | null = null;  // dragging out an area selection
+let selDragStart: { x: number; y: number } | null = null;  // dragging an existing selection to move it
 let panning = false;
 let propMoveStarted = false;
 let panStart = { x: 0, y: 0 };
@@ -99,6 +102,9 @@ function cancelStroke(): void {
 
 function onPointerDown(e: PointerEvent): void {
   try { canvas.setPointerCapture(e.pointerId); } catch { /* synthetic or already-released pointer */ }
+  // keys go to the map once it has been clicked, not to whichever input was last edited
+  const active = document.activeElement as HTMLElement | null;
+  if (active && active !== document.body && (active.tagName === 'INPUT' || active.tagName === 'SELECT' || active.tagName === 'TEXTAREA')) active.blur();
   pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
 
   if (pointers.size === 2) {
@@ -125,12 +131,21 @@ function onPointerDown(e: PointerEvent): void {
   if (state.playerView) return; // no editing from the player side
 
   if (state.tool === 'select') {
+    // inside an existing area selection: drag the whole area (issue #25)
+    if (state.selection && rectContains(state.selection, x, y)) {
+      selDragStart = { x, y };
+      state.selectionOffset = { dx: 0, dy: 0 };
+      return;
+    }
     const tok = tokenAtCell(x, y);
     if (tok) { draggingToken = tok; pushUndo(); state.dragFrom = { x, y }; }
     const cell = cellAt(state.grid, x, y);
     // any prop or door is selectable; props can be dragged to another cell (issue #17)
     state.selectedCell = !tok && cell && (cell.p || cell.d) ? { x, y } : null;
     if (!tok && cell && cell.p) { draggingProp = { x, y }; state.dragFrom = { x, y }; }
+    // empty ground: start dragging out an area
+    if (!tok && cell && !cell.p && !cell.d) { marqueeStart = { x, y }; }
+    if (state.selection) { state.selection = null; }
     selectToken(tok);
     return;
   }
@@ -198,6 +213,17 @@ function onPointerMove(e: PointerEvent): void {
     }
     return;
   }
+  if (marqueeStart) {
+    const cx = Math.max(0, Math.min(state.grid.w - 1, x)), cy = Math.max(0, Math.min(state.grid.h - 1, y));
+    const m = normalizeRect(state.grid, marqueeStart.x, marqueeStart.y, cx, cy);
+    if (!state.marquee || m.x0 !== state.marquee.x0 || m.y0 !== state.marquee.y0 || m.x1 !== state.marquee.x1 || m.y1 !== state.marquee.y1) { state.marquee = m; requestRender(); }
+    return;
+  }
+  if (selDragStart && state.selection) {
+    const dx = x - selDragStart.x, dy = y - selDragStart.y;
+    if (!state.selectionOffset || state.selectionOffset.dx !== dx || state.selectionOffset.dy !== dy) { state.selectionOffset = { dx, dy }; requestRender(); }
+    return;
+  }
   if (draggingProp) {
     if (inBounds(state.grid, x, y) && (draggingProp.x !== x || draggingProp.y !== y)) {
       const from = cellAt(state.grid, draggingProp.x, draggingProp.y)!;
@@ -231,6 +257,25 @@ function onPointerUp(e: PointerEvent): void {
   if (panning) { panning = false; canvas.classList.remove('panning'); return; }
   if (draggingToken) { draggingToken = null; state.dragFrom = null; requestRender(); return; }
   if (draggingProp) { draggingProp = null; propMoveStarted = false; state.dragFrom = null; renderInspector(); requestRender(); return; }
+  if (marqueeStart) {
+    const m = state.marquee;
+    marqueeStart = null; state.marquee = null;
+    state.selection = m && rectArea(m) > 1 ? m : null;
+    state.selectedCell = null;
+    renderInspector(); requestRender(); setStatus();
+    return;
+  }
+  if (selDragStart) {
+    const off = state.selectionOffset;
+    selDragStart = null; state.selectionOffset = null;
+    if (state.selection && off && (off.dx || off.dy)) {
+      pushUndo();
+      state.selection = moveRegion(state.grid, state.tokens, state.selection, off.dx, off.dy);
+      markChanged(); renderTokenList();
+    }
+    renderInspector(); requestRender();
+    return;
+  }
   if (painting && state.brushMode === 'rect' && rectStart) {
     const { x, y } = clientToCell(e.clientX, e.clientY);
     if (inBounds(state.grid, x, y)) {
@@ -282,12 +327,14 @@ export function initInteraction(): void {
       if (state.tool === 'token') { cancelPlacing(); state.tool = 'select'; }
       if (state.tool === 'prefab') { state.tool = 'select'; state.hoverCell = null; }
       state.selectedCell = null;
+      state.selection = null; state.marquee = null; state.selectionOffset = null;
       selectToken(null);
       (document.activeElement as HTMLElement | null)?.blur?.();
       setStatus();
       return;
     }
     if (isTypingInField()) return;
+    if ((e.key === 'Delete' || e.key === 'Backspace') && state.selection) { e.preventDefault(); clearSelection('all'); return; }
     if (e.code === 'Space' && !spaceHeld) { spaceHeld = true; canvas.classList.add('tool-pan'); e.preventDefault(); }
     if (e.key === 'v' || e.key === 'V') setTool('select');
     if ((e.key === 'r' || e.key === 'R') && state.tool === 'prefab') rotatePrefabTool();
@@ -303,6 +350,16 @@ export function initInteraction(): void {
   $('btnRedo').addEventListener('click', redo);
   $('btnSelectTool').addEventListener('click', () => setTool(state.tool === 'select' ? 'terrain' : 'select'));
   $('btnPanTool').addEventListener('click', () => setTool(state.tool === 'pan' ? 'terrain' : 'pan'));
+}
+
+/** Removes things inside the area selection (issue #25). */
+export function clearSelection(what: 'props' | 'tokens' | 'structure' | 'all'): void {
+  if (!state.selection) return;
+  pushUndo();
+  state.tokens = clearRegion(state.grid, state.tokens, state.selection, what);
+  if (!state.tokens.some(t => t.id === state.selectedTokenId)) state.selectedTokenId = null;
+  markChanged();
+  renderTokenList(); renderInspector(); requestRender(); setStatus();
 }
 
 /** Turns the prefab about to be stamped a quarter turn clockwise (issue #16). */

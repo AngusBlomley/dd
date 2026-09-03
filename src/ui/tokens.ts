@@ -5,6 +5,8 @@ import {
 } from '../engine/data';
 import { entriesOf, mapById, resolveExit } from '../campaign';
 import { cellAt } from '../engine/grid';
+import { countProps, rectArea, tokensIn } from '../engine/region';
+import { clearSelection } from './interaction';
 import { requestRender } from '../render/canvas';
 import { markChanged, pushUndo, state } from '../state';
 import { $, escapeHtml } from './dom';
@@ -159,6 +161,7 @@ export function renderInspector(): void {
   const body = $('inspectorBody');
   const tok = state.tokens.find(t => t.id === state.selectedTokenId);
   if (!tok) {
+    if (state.selection) { renderSelectionInspector(body); return; }
     if (state.selectedCell) { renderCellInspector(body, state.selectedCell.x, state.selectedCell.y); return; }
     body.innerHTML = '<div class="empty-note">Select a token on the map, or in the Tokens tab, to edit it here. With the Select tool, click an Exit or Entry cell to link maps.</div>';
     return;
@@ -377,4 +380,27 @@ function renderPropInspector(body: HTMLElement, cell: import('../engine/grid').C
     state.selectedCell = null;
     markChanged(); requestRender(); renderInspector();
   });
+}
+
+/* ---------- area selection (issue #25) ---------- */
+
+function renderSelectionInspector(body: HTMLElement): void {
+  const r = state.selection!;
+  const props = countProps(state.grid, r);
+  const toks = tokensIn(state.tokens, r).length;
+  let walls = 0, doors = 0;
+  for (let y = r.y0; y <= r.y1; y++) for (let x = r.x0; x <= r.x1; x++) { const c = cellAt(state.grid, x, y)!; if (c.w) walls++; if (c.d) doors++; }
+  body.innerHTML = `
+    <div class="callout-small"><b>${rectArea(r)} cells selected</b> · (${r.x0}, ${r.y0}) to (${r.x1}, ${r.y1})
+      <div class="map-meta">${props} prop${props === 1 ? '' : 's'} · ${toks} token${toks === 1 ? '' : 's'} · ${walls} wall${walls === 1 ? '' : 's'} · ${doors} door${doors === 1 ? '' : 's'}</div></div>
+    <div class="hint">Drag inside the selection to move everything in it. Delete removes it all. Esc deselects.</div>
+    <button class="btn full-btn" id="selRemoveProps">Remove props</button>
+    <button class="btn full-btn" id="selRemoveTokens">Remove tokens</button>
+    <button class="btn full-btn" id="selRemoveWalls">Remove walls &amp; doors</button>
+    <button class="btn danger full-btn" id="selRemoveAll" style="margin-top:10px">Remove everything</button>
+    <div class="hint">Terrain and fog memory are always kept.</div>`;
+  $('selRemoveProps').addEventListener('click', () => clearSelection('props'));
+  $('selRemoveTokens').addEventListener('click', () => clearSelection('tokens'));
+  $('selRemoveWalls').addEventListener('click', () => clearSelection('structure'));
+  $('selRemoveAll').addEventListener('click', () => clearSelection('all'));
 }

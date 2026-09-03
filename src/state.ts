@@ -36,6 +36,9 @@ export interface AppState {
   prefabTurns: number;                          // quarter turns clockwise for the prefab tool
   hoverCell: { x: number; y: number } | null;   // for the prefab preview
   dragFrom: { x: number; y: number } | null;    // where a dragged token started (drawn as a ghost)
+  selection: { x0: number; y0: number; x1: number; y1: number } | null; // area picked with the Select tool
+  marquee: { x0: number; y0: number; x1: number; y1: number } | null;   // area being dragged out right now
+  selectionOffset: { dx: number; dy: number } | null;                   // preview while moving a selection
   tool: ToolId;
   brushMode: BrushMode;
   playerView: boolean;
@@ -63,6 +66,9 @@ export const state: AppState = {
   prefabTurns: 0,
   hoverCell: null,
   dragFrom: null,
+  selection: null,
+  marquee: null,
+  selectionOffset: null,
   tool: 'terrain',
   brushMode: 'single',
   playerView: false,

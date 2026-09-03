@@ -61,6 +61,9 @@ export interface PaintOptions {
   preview?: { x: number; y: number; w: number; h: number } | null;
   /** Where a dragged prop started (drawn as a faint dashed cell). */
   ghostCell?: { x: number; y: number; icon: string } | null;
+  /** DM area selection, and where it is being dragged to. */
+  selection?: { x0: number; y0: number; x1: number; y1: number } | null;
+  selectionOffset?: { dx: number; dy: number } | null;
 }
 
 type Orient = 'h' | 'v';
@@ -230,6 +233,23 @@ export function paintMap(o: PaintOptions): void {
     c.strokeRect(o.ghostCell.x * cs + 2, o.ghostCell.y * cs + 2, cs - 4, cs - 4);
     c.restore();
   }
+  if (o.selection) {
+    const s = o.selection;
+    const sw = (s.x1 - s.x0 + 1) * cs, sh = (s.y1 - s.y0 + 1) * cs;
+    c.fillStyle = 'rgba(79,138,121,0.22)';
+    c.fillRect(s.x0 * cs, s.y0 * cs, sw, sh);
+    c.strokeStyle = '#6fb98a'; c.lineWidth = 2; c.setLineDash([6, 4]);
+    c.strokeRect(s.x0 * cs + 1, s.y0 * cs + 1, sw - 2, sh - 2);
+    c.setLineDash([]);
+    if (o.selectionOffset && (o.selectionOffset.dx || o.selectionOffset.dy)) {
+      const ox = (s.x0 + o.selectionOffset.dx) * cs, oy = (s.y0 + o.selectionOffset.dy) * cs;
+      c.fillStyle = 'rgba(244,185,74,0.18)';
+      c.fillRect(ox, oy, sw, sh);
+      c.strokeStyle = '#f4b94a'; c.lineWidth = 2; c.setLineDash([6, 4]);
+      c.strokeRect(ox + 1, oy + 1, sw - 2, sh - 2);
+      c.setLineDash([]);
+    }
+  }
   if (o.preview) {
     c.fillStyle = 'rgba(244,185,74,0.16)';
     c.fillRect(o.preview.x * cs, o.preview.y * cs, o.preview.w * cs, o.preview.h * cs);
@@ -313,6 +333,8 @@ export function render(): void {
     preview: !playerSide && state.tool === 'prefab' && state.hoverCell
       ? { x: state.hoverCell.x, y: state.hoverCell.y, ...prefabSize(rotatePrefab(PREFAB_MAP[state.selectedPrefab], state.prefabTurns)) }
       : null,
+    selection: playerSide ? null : (state.marquee ?? state.selection),
+    selectionOffset: playerSide ? null : state.selectionOffset,
     ghostCell: !playerSide && state.dragFrom && state.selectedTokenId === null && state.selectedCell
       ? { x: state.dragFrom.x, y: state.dragFrom.y, icon: PROP_MAP[cells[state.selectedCell.y * grid.w + state.selectedCell.x].p ?? '']?.icon ?? '' }
       : null,
