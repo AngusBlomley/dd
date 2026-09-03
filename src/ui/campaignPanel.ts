@@ -2,10 +2,10 @@
    import, export, delete campaigns). Also PNG export. */
 
 import {
-  addMap, duplicateMap, newCampaign, newMapRecord, openCampaign, removeMap, renameCampaign, renameMap, saveNow, setNextMap, switchMap,
+  addMap, duplicateMap, entriesOf, newCampaign, newMapRecord, openCampaign, removeMap, renameCampaign, renameMap, resolveExit, saveNow, setNextMap, switchMap,
 } from '../campaign';
 import { canvas, render, requestRender } from '../render/canvas';
-import { state } from '../state';
+import { markChanged, onChange, pushUndo, state } from '../state';
 import { isCampaignFile, parseCampaign, parseMap, serializeCampaign, serializeMap, type CampaignFile, type MapFile } from '../store/json';
 import { deleteCampaign, listCampaigns, loadCampaign, saveCampaign } from '../store/storage';
 import { $, escapeHtml } from './dom';
@@ -60,9 +60,70 @@ export function renderMapList(): void {
   const cur = c.maps.find(m => m.id === state.mapId);
   const sel = $<HTMLSelectElement>('nextMapSel');
   sel.innerHTML = '<option value="">— none —</option>' + c.maps.filter(m => m.id !== state.mapId).map(m => `<option value="${m.id}"${cur?.nextMapId === m.id ? ' selected' : ''}>${escapeHtml(m.name)}</option>`).join('');
+  renderMapExits();
+}
+
+/** Every exit on the current map with its own destination picker (issue #13). */
+export function renderMapExits(): void {
+  const c = state.campaign;
+  const box = $('mapExits');
+  box.innerHTML = '';
+  if (!c || !state.mapId) return;
+  const rec = c.maps.find(m => m.id === state.mapId);
+  if (!rec) return;
+  const live = { ...rec, grid: state.grid, tokens: state.tokens };
+  const exits: { x: number; y: number }[] = [];
+  for (let i = 0; i < state.grid.cells.length; i++) if (state.grid.cells[i].p === 'exit') exits.push({ x: i % state.grid.w, y: Math.floor(i / state.grid.w) });
+  if (!exits.length) { box.innerHTML = '<div class="empty-note">No exits on this map. Place one from Props › Dungeon features.</div>'; return; }
+  for (const e of exits) {
+    const cell = state.grid.cells[e.y * state.grid.w + e.x];
+    const r = resolveExit(live, e.x, e.y);
+    const row = document.createElement('div');
+    row.className = 'exit-config';
+    const mapOpts = c.maps.filter(m => m.id !== state.mapId).map(m => `<option value="${m.id}"${cell.link?.mapId === m.id ? ' selected' : ''}>${escapeHtml(m.name)}</option>`).join('');
+    row.innerHTML = `<div class="exit-config-head"><b>Exit at (${e.x}, ${e.y})</b><span class="map-meta">${r ? '→ ' + escapeHtml(r.map.name) + ' (' + r.x + ', ' + r.y + ')' : 'leads nowhere yet'}</span></div>
+      <div class="row2"><select class="exit-map"><option value="">next map</option>${mapOpts}</select><select class="exit-entry"></select></div>`;
+    const mapSel = row.querySelector<HTMLSelectElement>('.exit-map')!;
+    const entrySel = row.querySelector<HTMLSelectElement>('.exit-entry')!;
+    const fillEntries = () => {
+      const target = c.maps.find(m => m.id === mapSel.value);
+      entrySel.innerHTML = '';
+      entrySel.disabled = !target;
+      if (!target) { entrySel.innerHTML = '<option value="">first entry</option>'; return; }
+      const ents = entriesOf(target.id === state.mapId ? live : target);
+      if (!ents.length) { entrySel.innerHTML = '<option value="">no entry on that map</option>'; return; }
+      entrySel.innerHTML = ents.map(en => `<option value="${en.x},${en.y}"${cell.link && cell.link.mapId === target.id && cell.link.x === en.x && cell.link.y === en.y ? ' selected' : ''}>Entry at (${en.x}, ${en.y})</option>`).join('');
+    };
+    fillEntries();
+    const save = () => {
+      pushUndo();
+      const target = c.maps.find(m => m.id === mapSel.value);
+      if (!target) { cell.link = null; }
+      else {
+        const [ex, ey] = (entrySel.value || '').split(',').map(Number);
+        const ents = entriesOf(target);
+        const at = !isNaN(ex) && !isNaN(ey) ? { x: ex, y: ey } : ents[0] ?? { x: 1, y: 1 };
+        cell.link = { mapId: target.id, x: at.x, y: at.y };
+      }
+      markChanged(); requestRender(); renderMapExits(); renderInspector();
+    };
+    mapSel.addEventListener('change', () => { fillEntries(); save(); });
+    entrySel.addEventListener('change', save);
+    box.appendChild(row);
+  }
 }
 
 export function initMapsPanel(): void {
+  // The Maps tab follows the map: exits placed or removed since it was last drawn show up when it opens or changes.
+  document.querySelector('.tab[data-panel=maps]')!.addEventListener('click', renderMapList);
+  let pending: number | null = null;
+  onChange(() => {
+    if (pending !== null) return;
+    pending = window.setTimeout(() => {
+      pending = null;
+      if ($('panel-maps').classList.contains('active') && !document.activeElement?.closest('#mapExits')) renderMapList();
+    }, 300);
+  });
   $('nextMapSel').addEventListener('change', (e) => {
     if (!state.mapId) return;
     setNextMap(state.mapId, (e.target as HTMLSelectElement).value || null);

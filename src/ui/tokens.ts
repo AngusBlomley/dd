@@ -65,17 +65,63 @@ export function initTokenForm(): void {
     if (!colorTouched) $<HTMLInputElement>('newTokColor').value = TOKEN_TYPE_COLORS[type];
   });
   $('btnArmToken').addEventListener('click', () => {
-    state.placingToken = true;
-    state.tool = 'token';
-    $('armHint').style.display = 'block';
-    setStatus();
+    // Player characters can go straight to the map's arrival point (issue #12); everyone else is placed freely.
+    const type = $<HTMLSelectElement>('newTokType').value;
+    const rec = state.mapId ? mapById(state.mapId) : undefined;
+    const entries = rec ? entriesOf({ ...rec, grid: state.grid }) : [];
+    if (type !== 'pc' || !entries.length) { armFreePlacement(); return; }
+    $('modalPlace').classList.remove('hidden');
   });
+  $('placeAtEntryBtn').addEventListener('click', () => {
+    $('modalPlace').classList.add('hidden');
+    const rec = state.mapId ? mapById(state.mapId) : undefined;
+    const entries = rec ? entriesOf({ ...rec, grid: state.grid }) : [];
+    if (!entries.length) { armFreePlacement(); return; }
+    // stack characters next to the entry if it is already taken
+    let spot = entries[0];
+    const taken = (x: number, y: number) => state.tokens.some(t => t.x === x && t.y === y);
+    if (taken(spot.x, spot.y)) {
+      outer: for (let r = 1; r <= 3; r++) for (let dy = -r; dy <= r; dy++) for (let dx = -r; dx <= r; dx++) {
+        const c = cellAt(state.grid, spot.x + dx, spot.y + dy);
+        if (c && !c.w && !(c.d && !c.doOpen) && !taken(spot.x + dx, spot.y + dy)) { spot = { x: spot.x + dx, y: spot.y + dy }; break outer; }
+      }
+    }
+    createTokenAt(spot.x, spot.y);
+    state.tool = 'select';
+    renderTokenList(); renderInspector(); requestRender(); setStatus();
+  });
+  $('placeFreeBtn').addEventListener('click', () => { $('modalPlace').classList.add('hidden'); armFreePlacement(); });
+  $('placeCancelBtn').addEventListener('click', () => { $('modalPlace').classList.add('hidden'); });
   syncFormLabels();
 }
 
 export function cancelPlacing(): void {
   state.placingToken = false;
   $('armHint').style.display = 'none';
+}
+
+/** Creates a token from the form at a cell. Used by click placement and by "at the arrival point". */
+export function createTokenAt(x: number, y: number): Token {
+  const cfg = readTokenForm();
+  pushUndo();
+  const tok: Token = {
+    id: state.nextTokenId++,
+    name: cfg.name || ('Token ' + (state.nextTokenId - 1)),
+    type: cfg.type, x, y, color: cfg.color, size: cfg.size,
+    vision: cfg.vision, light: cfg.light,
+    hidden: cfg.hidden || undefined,
+  };
+  state.tokens.push(tok);
+  state.selectedTokenId = tok.id;
+  markChanged();
+  return tok;
+}
+
+function armFreePlacement(): void {
+  state.placingToken = true;
+  state.tool = 'token';
+  $('armHint').style.display = 'block';
+  setStatus();
 }
 
 export function deleteToken(id: number): void {
@@ -220,6 +266,7 @@ function renderCellInspector(body: HTMLElement, x: number, y: number): void {
     body.innerHTML = `<div class="callout-small"><b>Entry</b> at (${x}, ${y}). Exits on other maps can link here. Characters sent through arrive on this cell.</div>`;
     return;
   }
+  if (cell.d) { renderDoorInspector(body, cell, x, y); return; }
   if (cell.p !== 'exit') { body.innerHTML = ''; return; }
   const link = cell.link ?? null;
   const mapOpts = c.maps.map(m => `<option value="${m.id}"${link && link.mapId === m.id ? ' selected' : ''}>${escapeHtml(m.name)}${m.id === state.mapId ? ' (this map)' : ''}</option>`).join('');
@@ -264,4 +311,20 @@ function renderCellInspector(body: HTMLElement, x: number, y: number): void {
     cell.link = null;
     markChanged(); requestRender(); renderInspector();
   });
+}
+
+/* ---------- door inspector (issue #9) ---------- */
+
+function renderDoorInspector(body: HTMLElement, cell: import('../engine/grid').Cell, x: number, y: number): void {
+  const kind = cell.secret ? 'Secret door' : 'Door';
+  body.innerHTML = `
+    <div class="callout-small"><b>${kind}</b> at (${x}, ${y}) · ${cell.doOpen ? 'open' : 'closed'}${cell.secret ? ' · hidden from players (looks like a wall)' : ''}</div>
+    ${cell.secret ? '<button class="btn primary full-btn" id="doorReveal">Reveal to players</button>' : ''}
+    <button class="btn full-btn" id="doorToggle">${cell.doOpen ? 'Close door' : 'Open door'}</button>
+    ${cell.secret ? '' : '<button class="btn full-btn" id="doorHide">Make secret again</button>'}
+    <div class="hint">Revealing turns the wall into a visible door for the players. Opening it lets light and sight through. Doors draw across whichever wall they sit in.</div>`;
+  const done = () => { markChanged(); requestRender(); renderInspector(); };
+  document.getElementById('doorReveal')?.addEventListener('click', () => { pushUndo(); cell.secret = false; done(); });
+  document.getElementById('doorToggle')?.addEventListener('click', () => { pushUndo(); cell.doOpen = !cell.doOpen; done(); });
+  document.getElementById('doorHide')?.addEventListener('click', () => { pushUndo(); cell.secret = true; cell.doOpen = false; done(); });
 }

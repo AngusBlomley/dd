@@ -20,6 +20,7 @@ let fitted = false;
 let intensityF = new Float32Array(0);
 let pendingCenter = false;        // centre on my token after the next paint
 let moveTarget: { x: number; y: number } | null = null; // cell under a drag / tap-to-move
+let dragActive = false;           // dragging own token: draw it at moveTarget with a ghost at home
 let picking = false;              // tapped own token: next tap is the destination
 
 function playerId(): string {
@@ -93,8 +94,15 @@ function paint(): void {
     intensity: intensityF,
     playerSide: true,
     layers: LAYERS,
-    tokens: v.tokens.map(t => ({ x: t.x, y: t.y, size: t.size, color: t.color, initials: t.initials, light: t.light, mine: t.id === mine, selected: picking && t.id === mine })),
-    highlightCell: moveTarget,
+    tokens: v.tokens.flatMap(t => {
+      const isMine = t.id === mine;
+      const base = { size: t.size, color: t.color, initials: t.initials, light: t.light, mine: isMine, selected: picking && isMine };
+      if (isMine && dragActive && moveTarget) {
+        return [{ ...base, x: t.x, y: t.y, ghost: true }, { ...base, x: moveTarget.x, y: moveTarget.y }];
+      }
+      return [{ ...base, x: t.x, y: t.y }];
+    }),
+    highlightCell: dragActive ? null : moveTarget,
   });
   if (pendingCenter) { pendingCenter = false; centerOnMe(); }
 }
@@ -153,12 +161,13 @@ function initGestures(): void {
     if (pointers.size === 2) {
       const [a, b] = [...pointers.values()];
       pinch = { dist: Math.hypot(a.x - b.x, a.y - b.y), zoom, cx: (a.x + b.x) / 2, cy: (a.y + b.y) / 2 };
-      pan = null; dragging = null; moveTarget = null; requestPaint();
+      pan = null; dragging = null; moveTarget = null; dragActive = false; requestPaint();
     } else if (pointers.size === 1) {
       const cell = cellAtClient(e.clientX, e.clientY);
       const t = myToken();
       if (assignment?.canMove && t && cell && cell.x === t.x && cell.y === t.y) {
         dragging = { startX: e.clientX, startY: e.clientY, moved: false };
+        dragActive = true;
       } else if (picking && cell) {
         picking = false; moveTarget = null; requestPaint();
         requestMove(cell.x, cell.y);
@@ -192,7 +201,7 @@ function initGestures(): void {
       const cell = cellAtClient(e.clientX, e.clientY);
       if (dragging.moved && cell) requestMove(cell.x, cell.y);
       else { picking = !picking; }          // a tap on your own token arms tap-to-move
-      dragging = null; moveTarget = null; requestPaint();
+      dragging = null; moveTarget = null; dragActive = false; requestPaint();
     }
     if (pan && pointers.size === 0) {
       if (Math.hypot(e.clientX - pan.x, e.clientY - pan.y) < 6) {
@@ -241,8 +250,14 @@ function updateBanner(): void {
   if (!assignment || assignment.tokenId === null) {
     b.textContent = 'Waiting for the DM to place you on the map.';
     b.hidden = false;
+  } else if (assignment.exitState === 'nowhere') {
+    b.textContent = 'This exit leads nowhere yet. The DM will place you when ready.';
+    b.hidden = false;
+  } else if (assignment.exitState === 'no-entry') {
+    b.textContent = (assignment.exitLabel || 'The next map') + ' has no arrival point yet. The DM will place you when ready.';
+    b.hidden = false;
   } else if (assignment.atExit) {
-    b.textContent = 'You are standing at an exit' + (assignment.exitLabel ? ' to ' + assignment.exitLabel : '') + '. Waiting for the DM to open the way.';
+    b.textContent = 'You are at an exit' + (assignment.exitLabel ? ' to ' + assignment.exitLabel : '') + '. Step off and back on to go through, or wait for the DM.';
     b.hidden = false;
   } else {
     b.hidden = true;

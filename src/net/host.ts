@@ -5,7 +5,7 @@
 
 import { computeScene, markExplored, UNSEEN, type Scene } from '../engine/lighting';
 import { canOperateDoor, validateMove, type MoveDenial, type MoveRules } from '../engine/movement';
-import { requestSave, resolveExit } from '../campaign';
+import { hasEntry, requestSave, resolveEntry, resolveExit, transferToken } from '../campaign';
 import { markChanged, onChange, pushUndo, scene as activeScene, state } from '../state';
 import type { MapRecord } from '../store/json';
 import { PeerHost } from './peerTransport';
@@ -146,7 +146,8 @@ class HostSession {
     const c = state.campaign;
     if (!p || !c) return null;
     if (p.tokenId === null || p.tokenId !== tokenId || !p.mapId) { this.deny(peerId, p, 'not-your-token'); return null; }
-    const map = c.maps.find(m => m.id === p.mapId);
+    const rec = c.maps.find(m => m.id === p.mapId);
+    const map = rec && rec.id === state.mapId ? { ...rec, grid: state.grid, tokens: state.tokens } : rec;
     const token = map?.tokens.find(t => t.id === p.tokenId);
     if (!map || !token) { this.deny(peerId, p, 'not-your-token'); return null; }
     return { p, map, token };
@@ -269,6 +270,23 @@ class HostSession {
     if (this.moveMode === 'turn' && this.movementLeft !== null) this.movementLeft = Math.max(0, this.movementLeft - result.path.length);
     if (map.id === state.mapId) markChanged(); else { requestSave(); this.scheduleRefresh(); }
     this.emit();
+    this.autoTravel(map, token.id, x, y);
+  }
+
+  /** A character walking onto an Exit, or back onto an Entry, changes map by itself (issue #14). */
+  private autoTravel(map: MapRecord, tokenId: number, x: number, y: number): void {
+    const cell = map.grid.cells[y * map.grid.w + x];
+    if (!cell) return;
+    let dest: { map: MapRecord; x: number; y: number } | null = null;
+    if (cell.p === 'exit') {
+      const r = resolveExit(map, x, y);
+      if (r && hasEntry(r.map)) dest = r;   // no arrival point: the player waits for the DM instead
+    } else if (cell.p === 'entry') {
+      dest = resolveEntry(map, x, y);
+    }
+    if (!dest) return;
+    const newId = transferToken(map.id, tokenId, dest.map.id, dest.x, dest.y);
+    if (newId !== null) this.retarget(map.id, tokenId, dest.map.id, newId);
   }
 
   /* ---------- pushing views ---------- */
@@ -301,12 +319,15 @@ class HostSession {
       let token = map && p.tokenId !== null ? map.tokens.find(t => t.id === p.tokenId) : undefined;
       if (!token) { map = undefined; p.mapId = null; p.tokenId = null; }
       const shown = map ?? c.maps.find(m => m.id === state.mapId) ?? c.maps[0];
-      const exit = token && map ? resolveExit(map, token.x, token.y) : null;
-      const atExit = !!exit;
+      const live = map && map.id === state.mapId ? { ...map, grid: state.grid, tokens: state.tokens } : map;
+      const onExit = !!(token && live && live.grid.cells[token.y * live.grid.w + token.x]?.p === 'exit');
+      const exit = token && live && onExit ? resolveExit(live, token.x, token.y) : null;
+      const exitState: Assignment['exitState'] = !onExit ? 'none' : !exit ? 'nowhere' : !hasEntry(exit.map) ? 'no-entry' : 'ready';
+      const atExit = onExit;
       const target = exit?.map;
       const yourTurn = this.moveMode === 'turn' && this.turnPlayerId === p.playerId;
       const assignment: Assignment = {
-        mapId: shown.id, tokenId: token ? token.id : null, atExit, exitLabel: target?.name,
+        mapId: shown.id, tokenId: token ? token.id : null, atExit, exitLabel: target?.name, exitState,
         mode: this.moveMode,
         canMove: !!token && (this.moveMode === 'free' || yourTurn),
         yourTurn,

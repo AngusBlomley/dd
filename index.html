@@ -234,6 +234,8 @@ input[type=range]{width:100%;}
 #exitBanner{position:absolute;top:8px;left:8px;right:200px;display:flex;flex-direction:column;gap:6px;z-index:5;}
 .exit-banner-row{display:flex;align-items:center;justify-content:space-between;gap:12px;background:rgba(58,44,23,.94);border:1px solid var(--amber);border-radius:4px;padding:7px 12px;font-size:13px;color:var(--parchment);box-shadow:0 4px 14px rgba(0,0,0,.4);}
 #pToast{position:sticky;left:50%;bottom:14px;transform:translateX(-50%);display:inline-block;background:rgba(20,16,10,.92);border:1px solid var(--amber);color:var(--parchment);padding:7px 14px;border-radius:4px;font-size:13px;pointer-events:none;}
+.exit-config{border:1px solid var(--panel-border-lo);border-radius:3px;padding:7px 8px;margin-bottom:6px;background:var(--stone-800);font-size:12px;}
+.exit-config-head{display:flex;justify-content:space-between;gap:8px;margin-bottom:5px;align-items:baseline;}
 .exit-row{display:flex;align-items:center;justify-content:space-between;gap:8px;border:1px solid var(--panel-border-lo);border-radius:3px;padding:7px 8px;margin-bottom:6px;background:var(--stone-800);font-size:12.5px;}
 .callout-small{font-size:12px;color:var(--parchment);background:var(--stone-800);border-left:3px solid var(--amber);padding:6px 8px;margin:10px 0 6px;border-radius:0 3px 3px 0;}
 /* ---------- Player app ---------- */
@@ -290,6 +292,7 @@ body.player-mode{overflow:hidden;}
         <div class="tab active" data-panel="terrain">Terrain</div>
         <div class="tab" data-panel="walls">Walls&nbsp;/&nbsp;Doors</div>
         <div class="tab" data-panel="props">Props</div>
+        <div class="tab" data-panel="prefabs">Prefabs</div>
         <div class="tab" data-panel="tokens">Tokens</div>
         <div class="tab" data-panel="generate">Generate</div>
         <div class="tab" data-panel="maps">Maps</div>
@@ -324,6 +327,12 @@ body.player-mode{overflow:hidden;}
         <div class="section-label">Place Prop</div>
         <div id="propSwatches"></div>
         <div class="hint">Hover a prop for its light radius or whether it blocks sight and movement.</div>
+      </div>
+
+      <div class="panel" id="panel-prefabs">
+        <div class="section-label">Prefab rooms</div>
+        <div class="swatch-grid" id="prefabSwatches"></div>
+        <div class="hint">Pick one, then hover the map to see its outline and click to stamp it with its top-left corner at that cell. Stamps overwrite the cells they cover; Undo brings them back. Esc puts the tool down.</div>
       </div>
 
       <div class="panel" id="panel-tokens">
@@ -406,8 +415,7 @@ body.player-mode{overflow:hidden;}
         <label class="field">Seed (optional — reuse for the same layout)</label>
         <input type="text" id="genSeed" placeholder="leave blank for random">
         <button class="btn primary full-btn" id="btnGenerate">&#127922; Generate Dungeon</button>
-        <div class="check-row"><input type="checkbox" id="genReplace"><label for="genReplace">Replace the current map instead (keeps its tokens)</label></div>
-        <div class="hint">Each generation becomes a new map in the campaign, listed in the Maps tab, so earlier maps and the tokens on them stay as they were. Tick the box to overwrite the current map's layout instead; Undo brings it back.</div>
+        <div class="hint">You will be asked whether to make a new map (the current one and its tokens are kept, and you can switch back from the Maps tab) or to generate onto the map you are on. Every generated map gets an Entry (arrival point).</div>
       </div>
 
       <div class="panel" id="panel-maps">
@@ -422,9 +430,11 @@ body.player-mode{overflow:hidden;}
         <div class="hint">Everything saves automatically on this device. Use Switch / manage to export a campaign as a backup or move it to another device.</div>
         <div class="section-label">Maps in this campaign</div>
         <div id="mapList"></div>
-        <label class="field">Exits on this map lead to</label>
+        <label class="field">Next map (where unlinked exits lead)</label>
         <select id="nextMapSel"></select>
-        <div class="hint">The "next map" for any Exit prop that has no link of its own. Characters sent through arrive at the first Entry there, or the first open cell.</div>
+        <div class="section-label">Exits on this map</div>
+        <div id="mapExits"></div>
+        <div class="hint">Each exit can lead to a different map, so a dungeon can fork. Leave an exit on "next map" to follow the setting above. Characters who walk onto an exit go through by themselves when the destination has an Entry; walking onto an Entry takes them back.</div>
         <button class="btn primary full-btn" id="btnNewMap">+ New Map</button>
         <div class="row2" style="margin-top:8px">
           <button class="btn small" id="btnDuplicateMap">Duplicate</button>
@@ -563,6 +573,30 @@ body.player-mode{overflow:hidden;}
     </div>
     <div id="pWrap"><canvas id="playerCanvas"></canvas><div id="pWaiting" hidden><span class="spinner"></span> Waiting for the DM…</div><div id="pToast" hidden></div></div>
     <div id="pBanner" hidden></div>
+  </div>
+</div>
+
+<div class="modal-overlay hidden" id="modalGenerate">
+  <div class="modal-box">
+    <h2>Generate where?</h2>
+    <p class="hint" style="font-size:12.5px">A new map keeps the one you are on, with its tokens, and adds the result to the campaign. Generating onto this map replaces its layout; tokens stay where they are and Undo brings the old layout back.</p>
+    <div class="row2" style="margin-top:12px">
+      <button class="btn primary" id="genNewMapBtn">New map</button>
+      <button class="btn" id="genThisMapBtn">Onto this map</button>
+    </div>
+    <div class="modal-actions"><button class="btn" id="genCancelBtn">Cancel</button></div>
+  </div>
+</div>
+
+<div class="modal-overlay hidden" id="modalPlace">
+  <div class="modal-box">
+    <h2>Place the character</h2>
+    <p class="hint" style="font-size:12.5px">This map has an Entry (arrival point). Put the character there, or click a cell yourself.</p>
+    <div class="row2" style="margin-top:12px">
+      <button class="btn primary" id="placeAtEntryBtn">At the arrival point</button>
+      <button class="btn" id="placeFreeBtn">Place freely</button>
+    </div>
+    <div class="modal-actions"><button class="btn" id="placeCancelBtn">Cancel</button></div>
   </div>
 </div>
 

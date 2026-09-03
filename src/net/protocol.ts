@@ -37,8 +37,9 @@ export type MoveDenial = 'not-your-token' | 'not-your-turn' | 'blocked' | 'too-f
 export interface Assignment {
   mapId: string | null;   // map the player's token is on (or the DM's active map when unassigned)
   tokenId: number | null;
-  atExit: boolean;        // standing on a linked exit, waiting for the DM
+  atExit: boolean;        // standing on an exit
   exitLabel?: string;     // where the exit leads, for the waiting banner
+  exitState: 'none' | 'ready' | 'nowhere' | 'no-entry'; // ready: leads somewhere with an arrival point
   mode: MoveMode;
   canMove: boolean;       // this player may move their token right now
   yourTurn: boolean;

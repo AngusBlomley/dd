@@ -48,7 +48,8 @@ Taken from the call. **Must** = needed before the group uses it at the table. **
 
 ### 3.2 DM editor — Must
 
-- R9. Select/Move tool for tokens (B5).
+- R9. Select/Move tool for tokens (B5). While dragging, a faint ghost stays at the starting cell until the token is set down, on both the DM and player screens. Issue #10.
+- R9a. Selecting a door with the Select tool shows Open/Close, and for secret doors Reveal to players. Doors draw as a bar across whichever wall they sit in, horizontal or vertical, and swing aside when open. Issue #9.
 - R10. Layer panel with toggles: Terrain, Walls & Doors, Props, Tokens, Light overlay (bright/dim shading), Party vision overlay, Monster vision overlay, Fog memory, DM notes. Each is a visibility toggle; painting always goes to the layer the active tool belongs to.
 - R11. Campaign > Maps structure. Opening a campaign lists its maps; the DM switches the live map at any time.
 - R12. Save is automatic and local (IndexedDB). JSON export/import of a whole campaign or a single map stays as the backup and transfer format.
@@ -61,7 +62,9 @@ Taken from the call. **Must** = needed before the group uses it at the table. **
 - R16. More props: fungus lantern, brazier, campfire, glowing crystal, glowing mushroom cluster (light-emitting), cage, boat, bridge, rope, cart, well, mushroom (large, blocks sight), stalagmite (blocks), portcullis (door variant), ladder, trapdoor, secret door (DM-only until revealed).
 - R17. Token types stay free-form (PC / NPC / Monster / Object) with colour, size, vision and light. Add "hidden" flag for DM-only tokens. Players see tokens as colour plus initials only, no names.
 - R18. Generator gains a cave theme that produces organic caverns (cellular automata) rather than rectangular rooms.
-- R18a. Each generation becomes a new map in the campaign, so earlier maps and the tokens on them are kept; an option overwrites the current map instead. Issue #6.
+- R18a. Generating asks "new map or onto this map"; a new map keeps the current one and its tokens, generating onto the current map replaces its layout. Issues #6, #11.
+- R18b. Every generated map gets an Entry. Placing a player character offers "at the arrival point" or "place freely"; monsters and everything else are always placed freely. Issue #12.
+- R18c. Prefab rooms (tavern, home, shop, smithy, fishing dock, shrine, campsite, inn) stamp onto the map from a Prefabs tab with a hover outline. Issue #15.
 
 ### 3.4 Multiplayer session — Should (Prototype 3)
 
@@ -76,6 +79,8 @@ Taken from the call. **Must** = needed before the group uses it at the table. **
 - R25b. Linked maps: an Exit prop on one map leads to an Entry on another. A character standing on an exit waits there until the DM sends them through; the player's screen says so. Players see the map their character is on.
 - R25c. Each map has a "next map"; exits without a link of their own lead there, arriving at its first Entry or first open cell. The DM map labels every exit with where it leads, and a banner over the map with a Send Through button appears whenever a character is waiting at one. Issue #7.
 - R25d. Joining shows progress (looking for the host, connecting, waiting for the DM) and errors in place, with the Join button disabled meanwhile. Issue #5.
+- R25e. Every exit on a map can lead to a different map and entry, configured in the Maps tab, so dungeons can fork. Issue #13.
+- R25f. A character that walks onto an exit goes through by itself when the destination has an Entry; walking onto an Entry takes them back to the exit that arrives there. If the exit leads nowhere, or the destination has no Entry, the player is told the DM will place them. Issue #14.
 
 ### 3.5 Turns and player movement — Later (Prototype 4)
 

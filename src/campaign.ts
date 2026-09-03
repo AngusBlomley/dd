@@ -173,6 +173,31 @@ export function resolveExit(map: MapRecord, x: number, y: number): { map: MapRec
   return null;
 }
 
+export function hasEntry(map: MapRecord): boolean {
+  return map.grid.cells.some(c => c.p === 'entry');
+}
+
+/**
+ * Where an Entry leads back to: the exit on another map that arrives here,
+ * either through its own link or through that map's "next map". Null if none.
+ */
+export function resolveEntry(map: MapRecord, x: number, y: number): { map: MapRecord; x: number; y: number } | null {
+  const c = state.campaign;
+  const cell = map.grid.cells[y * map.grid.w + x];
+  if (!c || !cell || cell.p !== 'entry') return null;
+  for (const other of c.maps) {
+    if (other.id === map.id) continue;
+    const live = other.id === state.mapId ? { ...other, grid: state.grid, tokens: state.tokens } : other;
+    for (let i = 0; i < live.grid.cells.length; i++) {
+      if (live.grid.cells[i].p !== 'exit') continue;
+      const ex = i % live.grid.w, ey = Math.floor(i / live.grid.w);
+      const r = resolveExit(live, ex, ey);
+      if (r && r.map.id === map.id && r.x === x && r.y === y) return { map: other, x: ex, y: ey };
+    }
+  }
+  return null;
+}
+
 /**
  * Moves a token from one map to a cell on another. Returns the token's id on
  * the target map (ids are per map), or null if anything was missing.

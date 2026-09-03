@@ -49,6 +49,10 @@ npm run host
 
 It prints the addresses. The DM opens the first one, players open the join link on the same Wi-Fi.
 
+**Linked maps.** Place Exit and Entry props. Each map has a "next map", and each exit can point at a
+different map from the Maps tab, so dungeons can fork. Characters that walk onto an exit go through
+by themselves; walking onto an Entry takes them back.
+
 **Letting players move.** In the Session tab, Movement chooses who can move characters: the DM only,
 one player at a time (turn-based, with a movement budget), or everyone freely. Players drag their own
 character, or tap it and then tap where to go. Every move is checked on the DM's device.

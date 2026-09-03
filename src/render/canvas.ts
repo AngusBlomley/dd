@@ -4,6 +4,7 @@
 import { PROP_MAP, TERRAIN_MAP } from '../engine/data';
 import { BRIGHT, DIM, SEEN_DARKVISION, SEEN_DIM, UNSEEN, tokenVisibleToParty } from '../engine/lighting';
 import { mapById, resolveExit } from '../campaign';
+import { PREFAB_MAP, prefabSize } from '../engine/prefabs';
 import { scene, state, type Layers, type Overlays } from '../state';
 
 export const canvas = document.getElementById('mapCanvas') as HTMLCanvasElement;
@@ -34,7 +35,7 @@ const COLORS = {
 };
 
 export interface Look { t: string; w: boolean; d: boolean; doOpen: boolean; secret?: boolean; p: string | null }
-export interface PaintToken { x: number; y: number; size: number; color: string; initials: string; light: boolean; hidden?: boolean; selected?: boolean; mine?: boolean; turn?: boolean }
+export interface PaintToken { x: number; y: number; size: number; color: string; initials: string; light: boolean; hidden?: boolean; selected?: boolean; mine?: boolean; turn?: boolean; ghost?: boolean }
 
 export interface PaintOptions {
   ctx: CanvasRenderingContext2D;
@@ -56,9 +57,13 @@ export interface PaintOptions {
   highlightCell?: { x: number; y: number } | null;
   /** DM view: a short label to draw under an exit, e.g. the map it leads to. */
   exitLabel?: (i: number) => string | null;
+  /** Dashed outline of a prefab about to be stamped. */
+  preview?: { x: number; y: number; w: number; h: number } | null;
 }
 
-function drawCell(c: CanvasRenderingContext2D, x: number, y: number, cs: number, grey: boolean, look: Look, playerSide: boolean, L: Layers): void {
+type Orient = 'h' | 'v';
+
+function drawCell(c: CanvasRenderingContext2D, x: number, y: number, cs: number, grey: boolean, look: Look, playerSide: boolean, L: Layers, orient: Orient = 'h'): void {
   const px = x * cs, py = y * cs;
   const terr = TERRAIN_MAP[look.t] || TERRAIN_MAP.void;
   c.fillStyle = L.terrain ? (grey ? GREY[terr.id] : terr.color) : '#1a1613';
@@ -75,15 +80,27 @@ function drawCell(c: CanvasRenderingContext2D, x: number, y: number, cs: number,
     c.fillStyle = 'rgba(255,255,255,.04)';
     c.fillRect(px, py, cs, 3);
   } else if (L.walls && look.d) {
-    c.fillStyle = look.doOpen ? '#4a3a24' : '#6b4a2c';
-    c.fillRect(px + cs * 0.12, py + cs * 0.12, cs * 0.76, cs * 0.76);
-    c.strokeStyle = look.secret ? '#e6d7ab' : '#2c1e10'; c.lineWidth = 2;
-    if (look.secret) c.setLineDash([3, 3]);
-    c.strokeRect(px + cs * 0.12, py + cs * 0.12, cs * 0.76, cs * 0.76);
-    c.setLineDash([]);
+    // A door is a bar across the wall it sits in: horizontal when the wall runs left-right.
+    const thick = cs * 0.3, len = cs * 0.84, off = (cs - len) / 2;
+    const bar = (bx: number, by: number, bw: number, bh: number) => {
+      c.fillStyle = '#6b4a2c'; c.fillRect(bx, by, bw, bh);
+      c.strokeStyle = look.secret ? '#e6d7ab' : '#2c1e10'; c.lineWidth = 1.5;
+      if (look.secret) c.setLineDash([3, 3]);
+      c.strokeRect(bx, by, bw, bh); c.setLineDash([]);
+    };
     if (!look.doOpen) {
+      if (orient === 'h') bar(px + off, py + cs / 2 - thick / 2, len, thick);
+      else bar(px + cs / 2 - thick / 2, py + off, thick, len);
       c.fillStyle = '#d8b25a';
-      c.beginPath(); c.arc(px + cs * 0.78, py + cs * 0.5, Math.max(1.5, cs * 0.05), 0, 7); c.fill();
+      c.beginPath();
+      if (orient === 'h') c.arc(px + cs * 0.72, py + cs / 2, Math.max(1.5, cs * 0.05), 0, 7);
+      else c.arc(px + cs / 2, py + cs * 0.72, Math.max(1.5, cs * 0.05), 0, 7);
+      c.fill();
+    } else {
+      // open: the leaf swung to one side, leaving the middle clear
+      const stub = cs * 0.18;
+      if (orient === 'h') { bar(px + off, py + cs / 2 - thick / 2, stub, thick); bar(px + off, py + cs * 0.1, thick * 0.7, cs * 0.42); bar(px + cs - off - stub, py + cs / 2 - thick / 2, stub, thick); }
+      else { bar(px + cs / 2 - thick / 2, py + off, thick, stub); bar(px + cs * 0.1, py + off, cs * 0.42, thick * 0.7); bar(px + cs / 2 - thick / 2, py + cs - off - stub, thick, stub); }
     }
   }
   if (L.props && look.p) {
@@ -111,6 +128,19 @@ export function paintMap(o: PaintOptions): void {
   c.imageSmoothingEnabled = false;
   c.clearRect(0, 0, w * cs, h * cs);
 
+  // which way a door's wall runs, from its neighbours (walls, or what the viewer remembers as walls)
+  const wallish = (x: number, y: number): boolean => {
+    if (x < 0 || y < 0 || x >= w || y >= h) return true;
+    const j = y * w + x;
+    const l = o.lookAt(j) ?? o.memAt(j);
+    return !!l && (l.w || (!!l.d && !!l.secret && o.playerSide));
+  };
+  const orientAt = (x: number, y: number): Orient => {
+    const lr = (wallish(x - 1, y) ? 1 : 0) + (wallish(x + 1, y) ? 1 : 0);
+    const ud = (wallish(x, y - 1) ? 1 : 0) + (wallish(x, y + 1) ? 1 : 0);
+    return ud > lr ? 'v' : 'h';
+  };
+
   for (let y = 0; y < h; y++) {
     for (let x = 0; x < w; x++) {
       const i = y * w + x;
@@ -121,10 +151,10 @@ export function paintMap(o: PaintOptions): void {
         if (!look) {
           const mem = o.memAt(i);
           if (!mem) { c.fillStyle = COLORS.unseen; c.fillRect(px, py, cs, cs); continue; }
-          drawCell(c, x, y, cs, false, mem, true, o.layers);
+          drawCell(c, x, y, cs, false, mem, true, o.layers, mem.d ? orientAt(x, y) : 'h');
           overlay(c, x, y, cs, COLORS.memoryOverlay);
         } else {
-          drawCell(c, x, y, cs, see === SEEN_DARKVISION, look, true, o.layers);
+          drawCell(c, x, y, cs, see === SEEN_DARKVISION, look, true, o.layers, look.d ? orientAt(x, y) : 'h');
           if (see === SEEN_DIM) {
             const a = 0.18 + 0.42 * (1 - Math.min(1, o.intensity[i]));
             overlay(c, x, y, cs, `rgba(5,4,3,${a.toFixed(3)})`);
@@ -132,7 +162,7 @@ export function paintMap(o: PaintOptions): void {
         }
       } else {
         const look = o.lookAt(i)!;
-        drawCell(c, x, y, cs, false, look, false, o.layers);
+        drawCell(c, x, y, cs, false, look, false, o.layers, look.d ? orientAt(x, y) : 'h');
         const ov = o.overlays;
         if (ov) {
           if (ov.flags.light) {
@@ -175,11 +205,26 @@ export function paintMap(o: PaintOptions): void {
     c.strokeStyle = '#f4b94a'; c.lineWidth = 3;
     c.strokeRect(o.highlightCell.x * cs + 2, o.highlightCell.y * cs + 2, cs - 4, cs - 4);
   }
+  if (o.preview) {
+    c.fillStyle = 'rgba(244,185,74,0.16)';
+    c.fillRect(o.preview.x * cs, o.preview.y * cs, o.preview.w * cs, o.preview.h * cs);
+    c.strokeStyle = '#f4b94a'; c.lineWidth = 2; c.setLineDash([6, 4]);
+    c.strokeRect(o.preview.x * cs + 1, o.preview.y * cs + 1, o.preview.w * cs - 2, o.preview.h * cs - 2);
+    c.setLineDash([]);
+  }
 
   if (!o.layers.tokens && !o.playerSide) return;
   for (const tok of o.tokens) {
     const cx = tok.x * cs + cs / 2, cy = tok.y * cs + cs / 2;
     const rad = Math.max(6, (cs / 2) * Math.min(tok.size, 1) * 0.86 + (tok.size > 1 ? cs * 0.14 * (tok.size - 1) : 0));
+    if (tok.ghost) {
+      // where a dragged token started: faint copy with a dashed outline (issue #10)
+      c.save(); c.globalAlpha = 0.35;
+      c.beginPath(); c.arc(cx, cy, rad, 0, Math.PI * 2); c.fillStyle = tok.color; c.fill();
+      c.globalAlpha = 0.8; c.setLineDash([4, 3]); c.strokeStyle = '#e6d7ab'; c.lineWidth = 1.5; c.stroke();
+      c.restore();
+      continue;
+    }
     if (tok.mine) {
       c.beginPath(); c.arc(cx, cy, rad + 4, 0, Math.PI * 2);
       c.strokeStyle = 'rgba(244,185,74,0.9)'; c.lineWidth = 2; c.setLineDash([4, 3]); c.stroke(); c.setLineDash([]);
@@ -234,8 +279,17 @@ export function render(): void {
     overlays: playerSide ? undefined : { flags: state.overlays, light: sc.light, party: sc.party, monsters: sc.monsters, explored: (i) => !!cells[i].mem },
     tokens: state.tokens
       .filter(t => !playerSide || tokenVisibleToParty(t, sc.party, grid.w))
-      .map(t => ({ x: t.x, y: t.y, size: t.size, color: t.color, initials: initialsOf(t.name), light: !!t.light, hidden: t.hidden, selected: t.id === state.selectedTokenId, turn: !playerSide && t.id === state.turnTokenId })),
+      .flatMap(t => {
+        const pt = { x: t.x, y: t.y, size: t.size, color: t.color, initials: initialsOf(t.name), light: !!t.light, hidden: t.hidden, selected: t.id === state.selectedTokenId, turn: !playerSide && t.id === state.turnTokenId };
+        if (!playerSide && state.dragFrom && t.id === state.selectedTokenId && (state.dragFrom.x !== t.x || state.dragFrom.y !== t.y)) {
+          return [{ ...pt, x: state.dragFrom.x, y: state.dragFrom.y, ghost: true, selected: false, turn: false }, pt];
+        }
+        return [pt];
+      }),
     highlightCell: playerSide ? null : state.selectedCell,
+    preview: !playerSide && state.tool === 'prefab' && state.hoverCell
+      ? { x: state.hoverCell.x, y: state.hoverCell.y, ...prefabSize(PREFAB_MAP[state.selectedPrefab]) }
+      : null,
     exitLabel: playerSide ? undefined : (i) => {
       if (cells[i].p !== 'exit') return null;
       const rec = state.mapId ? mapById(state.mapId) : undefined;

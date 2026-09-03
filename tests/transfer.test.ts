@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 // campaign.ts schedules autosaves with window timers; give it a stub window in node.
 (globalThis as any).window = { setTimeout: () => 0, clearTimeout: () => undefined, addEventListener: () => undefined };
 
-import { arrivalCell, entriesOf, newCampaign, newMapRecord, resolveExit, setNextMap, transferToken } from '../src/campaign';
+import { arrivalCell, entriesOf, hasEntry, newCampaign, newMapRecord, resolveEntry, resolveExit, setNextMap, transferToken } from '../src/campaign';
 import type { Token } from '../src/engine/data';
 import { cellAt, createGrid } from '../src/engine/grid';
 import { onChange, state } from '../src/state';
@@ -82,6 +82,17 @@ describe('linked maps: transferToken', () => {
     expect(resolveExit(a, 1, 1)).toBeNull();                         // not an exit
     setNextMap(a.id, a.id);                                          // a map cannot be its own next map
     expect(a.nextMapId).toBeNull();
+  });
+
+  it('an Entry leads back to the exit that arrives on it (issue #14)', () => {
+    const [a, b] = state.campaign!.maps;
+    expect(hasEntry(b)).toBe(true);
+    expect(hasEntry(a)).toBe(false);
+    expect(resolveEntry(b, 3, 3)).toEqual({ map: a, x: 9, y: 9 });   // a's exit at (9,9) links to b (3,3)
+    expect(resolveEntry(b, 6, 1)).toBeNull();                         // nothing arrives here
+    setNextMap(a.id, b.id);
+    cellAt(a.grid, 0, 9)!.p = 'exit';                                 // unlinked exit -> b's first entry (6,1)
+    expect(resolveEntry(b, 6, 1)).toEqual({ map: a, x: 0, y: 9 });
   });
 
   it('arrival falls back to the first walkable cell when a map has no entry', () => {

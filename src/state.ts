@@ -6,7 +6,7 @@ import { createGrid, type Grid } from './engine/grid';
 import { computeScene, markExplored, type Scene } from './engine/lighting';
 import type { Campaign } from './store/json';
 
-export type ToolId = 'terrain' | 'wall' | 'door' | 'secretdoor' | 'prop' | 'eraser' | 'select' | 'token' | 'pan';
+export type ToolId = 'terrain' | 'wall' | 'door' | 'secretdoor' | 'prop' | 'prefab' | 'eraser' | 'select' | 'token' | 'pan';
 export type BrushMode = 'single' | 'rect';
 
 export interface Overlays {
@@ -32,6 +32,9 @@ export interface AppState {
   nextTokenId: number;
   selectedTerrain: string;
   selectedProp: string;
+  selectedPrefab: string;
+  hoverCell: { x: number; y: number } | null;   // for the prefab preview
+  dragFrom: { x: number; y: number } | null;    // where a dragged token started (drawn as a ghost)
   tool: ToolId;
   brushMode: BrushMode;
   playerView: boolean;
@@ -55,6 +58,9 @@ export const state: AppState = {
   nextTokenId: 1,
   selectedTerrain: 'stone',
   selectedProp: 'torch',
+  selectedPrefab: 'tavern',
+  hoverCell: null,
+  dragFrom: null,
   tool: 'terrain',
   brushMode: 'single',
   playerView: false,

@@ -5,7 +5,7 @@ import { syncLayersPanel } from './panels';
 
 const TOOL_LABELS: Record<ToolId, string> = {
   terrain: 'Terrain Brush', wall: 'Wall Brush', door: 'Door Brush', secretdoor: 'Secret Door', prop: 'Prop Brush',
-  eraser: 'Eraser', select: 'Select / Move Token', token: 'Place Token', pan: 'Pan',
+  eraser: 'Eraser', select: 'Select / Move Token', token: 'Place Token', pan: 'Pan', prefab: 'Place Prefab (click to stamp, Esc to stop)',
 };
 
 /** Refreshes the status bar, tool buttons, layer checkboxes and canvas cursor from state. */

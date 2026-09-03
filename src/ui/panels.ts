@@ -25,8 +25,14 @@ export function initGeneratorPanel(): void {
   $('genRooms').addEventListener('input', (e) => { $('genRoomsVal').textContent = (e.target as HTMLInputElement).value; });
   $('genTheme').addEventListener('change', syncGeneratorLabels);
   syncGeneratorLabels();
-  $('btnGenerate').addEventListener('click', () => {
-    const replace = $<HTMLInputElement>('genReplace').checked;
+  $('btnGenerate').addEventListener('click', () => { $('modalGenerate').classList.remove('hidden'); });
+  $('genCancelBtn').addEventListener('click', () => { $('modalGenerate').classList.add('hidden'); });
+  $('genNewMapBtn').addEventListener('click', () => { $('modalGenerate').classList.add('hidden'); runGenerate(false); });
+  $('genThisMapBtn').addEventListener('click', () => { $('modalGenerate').classList.add('hidden'); runGenerate(true); });
+}
+
+function runGenerate(replace: boolean): void {
+  {
     if (replace) pushUndo();
     const roomMin = num('genRoomMin');
     const opts: GeneratorOptions = {
@@ -56,7 +62,7 @@ export function initGeneratorPanel(): void {
       renderMapList(); renderTokenList(); renderInspector();
     }
     requestRender(); setStatus();
-  });
+  }
 }
 
 export function initMapSettings(): void {

@@ -4,11 +4,12 @@
 
 import type { Token } from '../engine/data';
 import { cellAt, inBounds } from '../engine/grid';
+import { PREFAB_MAP, stampPrefab } from '../engine/prefabs';
 import { canvas, effCell, render, requestRender } from '../render/canvas';
 import { markChanged, popRedo, popUndo, pushUndo, state, type Overlays } from '../state';
 import { $ } from './dom';
 import { setStatus } from './status';
-import { cancelPlacing, readTokenForm, renderInspector, renderTokenList } from './tokens';
+import { cancelPlacing, createTokenAt, renderInspector, renderTokenList } from './tokens';
 
 const wrap = $('canvas-wrap');
 const MIN_ZOOM = 0.35, MAX_ZOOM = 3;
@@ -62,21 +63,6 @@ function selectToken(tok: Token | null): void {
   renderInspector(); renderTokenList(); requestRender();
 }
 
-function placeTokenAt(x: number, y: number): void {
-  const cfg = readTokenForm();
-  pushUndo();
-  const tok: Token = {
-    id: state.nextTokenId++,
-    name: cfg.name || ('Token ' + (state.nextTokenId - 1)),
-    type: cfg.type, x, y, color: cfg.color, size: cfg.size,
-    vision: cfg.vision, light: cfg.light,
-    hidden: cfg.hidden || undefined,
-  };
-  state.tokens.push(tok);
-  state.selectedTokenId = tok.id;
-  markChanged();
-  refreshAll();
-}
 
 /* ---------- zoom ---------- */
 
@@ -138,16 +124,23 @@ function onPointerDown(e: PointerEvent): void {
 
   if (state.tool === 'select') {
     const tok = tokenAtCell(x, y);
-    if (tok) { draggingToken = tok; pushUndo(); }
+    if (tok) { draggingToken = tok; pushUndo(); state.dragFrom = { x, y }; }
     const cell = cellAt(state.grid, x, y);
-    state.selectedCell = !tok && cell && (cell.p === 'exit' || cell.p === 'entry') ? { x, y } : null;
+    state.selectedCell = !tok && cell && (cell.p === 'exit' || cell.p === 'entry' || cell.d) ? { x, y } : null;
     selectToken(tok);
     return;
   }
   if (state.tool === 'token') {
     const existing = tokenAtCell(x, y);
     if (existing) { selectToken(existing); return; }
-    if (state.placingToken) placeTokenAt(x, y);
+    if (state.placingToken) { createTokenAt(x, y); refreshAll(); }
+    return;
+  }
+  if (state.tool === 'prefab') {
+    pushUndo();
+    stampPrefab(state.grid, PREFAB_MAP[state.selectedPrefab], x, y);
+    markChanged();
+    requestRender();
     return;
   }
   const c = cellAt(state.grid, x, y)!;
@@ -185,6 +178,10 @@ function onPointerMove(e: PointerEvent): void {
 
   const { x, y } = clientToCell(e.clientX, e.clientY);
   $('hover-coord').textContent = inBounds(state.grid, x, y) ? 'x:' + x + '  y:' + y : '—';
+  if (state.tool === 'prefab') {
+    const hc = inBounds(state.grid, x, y) ? { x, y } : null;
+    if ((hc?.x !== state.hoverCell?.x) || (hc?.y !== state.hoverCell?.y)) { state.hoverCell = hc; requestRender(); }
+  }
 
   if (panning) {
     wrap.scrollLeft = scrollStart.l - (e.clientX - panStart.x);
@@ -211,7 +208,7 @@ function onPointerUp(e: PointerEvent): void {
     return;
   }
   if (panning) { panning = false; canvas.classList.remove('panning'); return; }
-  if (draggingToken) { draggingToken = null; return; }
+  if (draggingToken) { draggingToken = null; state.dragFrom = null; requestRender(); return; }
   if (painting && state.brushMode === 'rect' && rectStart) {
     const { x, y } = clientToCell(e.clientX, e.clientY);
     if (inBounds(state.grid, x, y)) {
@@ -230,7 +227,9 @@ function onPointerUp(e: PointerEvent): void {
 function setTool(tool: 'select' | 'pan' | 'terrain'): void {
   if (state.tool === 'token') cancelPlacing();
   state.tool = tool;
+  state.hoverCell = null;
   setStatus();
+  requestRender();
 }
 
 function isTypingInField(): boolean {
@@ -259,6 +258,7 @@ export function initInteraction(): void {
     if (mod && (e.key === 'y' || e.key === 'Y')) { e.preventDefault(); redo(); return; }
     if (e.key === 'Escape') {
       if (state.tool === 'token') { cancelPlacing(); state.tool = 'select'; }
+      if (state.tool === 'prefab') { state.tool = 'select'; state.hoverCell = null; }
       state.selectedCell = null;
       selectToken(null);
       (document.activeElement as HTMLElement | null)?.blur?.();

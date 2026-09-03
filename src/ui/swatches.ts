@@ -1,6 +1,7 @@
 /* Sidebar tabs, terrain / prop / structure swatches, brush mode buttons. */
 
 import { PROPS, PROP_CATEGORY_LABELS, TERRAINS, type PropCategory, type Terrain } from '../engine/data';
+import { PREFABS, prefabSize } from '../engine/prefabs';
 import { state, type BrushMode, type ToolId } from '../state';
 import { $ } from './dom';
 import { setStatus } from './status';
@@ -58,6 +59,21 @@ export function initSwatches(): void {
       grid.appendChild(el);
     }
     propEl.appendChild(grid);
+  }
+
+  const prefabEl = $('prefabSwatches');
+  for (const p of PREFABS) {
+    const { w, h } = prefabSize(p);
+    const el = document.createElement('div');
+    el.className = 'swatch' + (p.id === state.selectedPrefab ? ' selected' : ''); el.dataset.prefab = p.id;
+    el.title = `${w} × ${h} cells`;
+    el.innerHTML = '<div class="prop-icon">' + p.icon + '</div>' + p.name;
+    el.addEventListener('click', () => {
+      state.selectedPrefab = p.id; state.tool = 'prefab';
+      selectOnly('#prefabSwatches', el);
+      setStatus();
+    });
+    prefabEl.appendChild(el);
   }
 
   document.querySelectorAll<HTMLElement>('#panel-walls .swatch').forEach(el => {

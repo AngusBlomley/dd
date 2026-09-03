@@ -132,7 +132,26 @@ function generateRooms(opts: GeneratorOptions): Grid {
 
   placeStairsInRooms(grid, rooms, rng, 'stairs_up', opts.stairsUp);
   placeStairsInRooms(grid, rooms, rng, 'stairs_down', opts.stairsDown);
+  placeEntry(grid, rooms.length ? rooms[0] : null, rng);
   return grid;
+}
+
+/** One arrival point per generated map, in the first room or on any open floor. */
+function placeEntry(grid: Grid, room: Room | null, rng: Rng): void {
+  const tryCell = (x: number, y: number) => {
+    const c = cellAt(grid, x, y);
+    if (c && !c.w && !c.d && !c.p && c.t !== 'void') { c.p = 'entry'; return true; }
+    return false;
+  };
+  if (room) {
+    if (tryCell(room.x + Math.floor(room.w / 2), room.y + Math.floor(room.h / 2))) return;
+    for (let y = room.y; y < room.y + room.h; y++) for (let x = room.x; x < room.x + room.w; x++) if (tryCell(x, y)) return;
+  }
+  const open: number[] = [];
+  for (let i = 0; i < grid.cells.length; i++) { const c = grid.cells[i]; if (!c.w && !c.d && !c.p && c.t !== 'void') open.push(i); }
+  if (!open.length) return;
+  const i = open[Math.floor(rng() * open.length)];
+  tryCell(i % grid.w, Math.floor(i / grid.w));
 }
 
 function placeStairsInRooms(grid: Grid, rooms: Room[], rng: Rng, propId: string, count: number): void {
@@ -315,5 +334,15 @@ export function generateCave(opts: GeneratorOptions): Grid {
   };
   placeStairs('stairs_up', opts.stairsUp);
   placeStairs('stairs_down', opts.stairsDown);
+  // arrival point: the most open floor cell nearest the left edge
+  let entryAt = -1, entryScore = -1;
+  for (const i of floorCells) {
+    if (grid.cells[i].p) continue;
+    const x = i % w;
+    const score = openFloor(i) * 100 - x;
+    if (score > entryScore) { entryScore = score; entryAt = i; }
+  }
+  if (entryAt >= 0) grid.cells[entryAt].p = 'entry';
+  else placeEntry(grid, null, rng);
   return grid;
 }
