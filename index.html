@@ -1,0 +1,406 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Cartographer's Table</title>
+<style>
+:root{
+  --void:#100d09;
+  --stone-950:#191410;
+  --stone-900:#211a14;
+  --stone-800:#2b2219;
+  --stone-700:#3a2f22;
+  --panel-border:#5c4a32;
+  --panel-border-lo:#40331f;
+  --parchment:#e6d7ab;
+  --parchment-dim:#b8a978;
+  --ink:#2a2013;
+  --amber:#dd9b34;
+  --amber-hi:#f4b94a;
+  --fire:#ff7a29;
+  --teal:#4f8a79;
+  --danger:#b0432f;
+  --ok:#5f9457;
+  --font-display:Georgia,'Iowan Old Style','Palatino Linotype',serif;
+  --font-ui:'Segoe UI',system-ui,-apple-system,sans-serif;
+}
+*{box-sizing:border-box;}
+html,body{height:100%;margin:0;}
+body{
+  background:var(--void);
+  color:var(--parchment);
+  font-family:var(--font-ui);
+  overflow:hidden;
+}
+#app{display:flex;flex-direction:column;height:100vh;}
+
+/* ---------- Topbar ---------- */
+#topbar{
+  display:flex;align-items:center;gap:14px;
+  padding:10px 16px;
+  background:linear-gradient(180deg,var(--stone-800),var(--stone-900));
+  border-bottom:2px solid var(--panel-border);
+  flex-shrink:0;
+}
+#topbar h1{
+  font-family:var(--font-display);
+  font-size:19px;font-weight:700;letter-spacing:.3px;
+  color:var(--amber-hi);
+  margin:0;padding-right:8px;
+  border-right:1px solid var(--panel-border-lo);
+  white-space:nowrap;
+}
+.topbar-group{display:flex;gap:6px;align-items:center;}
+.spacer{flex:1;}
+.btn{
+  background:var(--stone-700);
+  border:1px solid var(--panel-border);
+  color:var(--parchment);
+  padding:7px 12px;
+  font-size:13px;
+  font-family:var(--font-ui);
+  border-radius:3px;
+  cursor:pointer;
+  transition:background .12s,border-color .12s;
+  white-space:nowrap;
+}
+.btn:hover{background:#443626;border-color:var(--amber);}
+.btn:active{transform:translateY(1px);}
+.btn.primary{background:linear-gradient(180deg,#c97a25,#a85f18);border-color:#8a4d13;color:#1a1206;font-weight:600;}
+.btn.primary:hover{background:linear-gradient(180deg,#da8a2e,#b56920);}
+.btn.danger{background:#4a2019;border-color:#6b2c22;}
+.btn.danger:hover{background:#5c281f;}
+.btn.small{padding:4px 9px;font-size:12px;}
+.btn.toggle.active{background:var(--amber);color:#241905;border-color:var(--amber-hi);font-weight:700;}
+.btn:disabled{opacity:.4;cursor:not-allowed;}
+
+/* ---------- Layout ---------- */
+#main{flex:1;display:flex;min-height:0;}
+#sidebar{
+  width:250px;flex-shrink:0;
+  background:var(--stone-900);
+  border-right:2px solid var(--panel-border);
+  display:flex;flex-direction:column;
+  overflow:hidden;
+}
+#inspector{
+  width:230px;flex-shrink:0;
+  background:var(--stone-900);
+  border-left:2px solid var(--panel-border);
+  overflow-y:auto;
+  padding:12px;
+}
+.tabs{display:flex;flex-wrap:wrap;background:var(--stone-950);border-bottom:1px solid var(--panel-border-lo);}
+.tab{
+  flex:1 1 33%;text-align:center;padding:8px 2px;font-size:11.5px;
+  cursor:pointer;color:var(--parchment-dim);border-bottom:2px solid transparent;
+  user-select:none;
+}
+.tab:hover{color:var(--parchment);}
+.tab.active{color:var(--amber-hi);border-bottom-color:var(--amber);background:var(--stone-800);}
+.panel{display:none;padding:12px;overflow-y:auto;flex:1;min-height:0;}
+.panel.active{display:block;}
+.section-label{
+  font-family:var(--font-display);
+  color:var(--amber-hi);font-size:13px;margin:14px 0 6px;
+  border-bottom:1px solid var(--panel-border-lo);padding-bottom:3px;
+}
+.section-label:first-child{margin-top:0;}
+.swatch-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;}
+.swatch{
+  border:2px solid var(--panel-border-lo);border-radius:4px;
+  padding:6px 3px;text-align:center;cursor:pointer;font-size:10.5px;
+  color:var(--parchment);background:var(--stone-800);
+  display:flex;flex-direction:column;align-items:center;gap:4px;
+}
+.swatch .chip{width:22px;height:22px;border-radius:3px;border:1px solid rgba(0,0,0,.4);}
+.swatch:hover{border-color:var(--amber);}
+.swatch.selected{border-color:var(--amber-hi);background:#3a2c17;box-shadow:0 0 0 1px var(--amber-hi) inset;}
+.prop-icon{font-size:18px;line-height:1;}
+label.field{display:block;font-size:12px;color:var(--parchment-dim);margin:8px 0 3px;}
+input[type=text],input[type=number],select,input[type=color]{
+  width:100%;background:var(--stone-800);border:1px solid var(--panel-border-lo);
+  color:var(--parchment);padding:5px 7px;border-radius:3px;font-size:12.5px;font-family:var(--font-ui);
+}
+input[type=color]{padding:2px;height:30px;cursor:pointer;}
+input[type=range]{width:100%;}
+.row2{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
+.check-row{display:flex;align-items:center;gap:7px;margin:8px 0;font-size:12.5px;color:var(--parchment);}
+.check-row input{width:16px;height:16px;}
+.hint{font-size:11px;color:var(--parchment-dim);line-height:1.4;margin-top:4px;}
+.full-btn{width:100%;margin-top:10px;}
+
+/* ---------- Canvas area ---------- */
+#canvas-wrap{
+  flex:1;overflow:auto;position:relative;
+  background:
+    radial-gradient(ellipse at center,#1c1712 0%,var(--void) 75%);
+  background-size:24px 24px, 100% 100%;
+}
+#canvas-wrap::before{
+  content:"";position:absolute;inset:0;pointer-events:none;
+  background-image:radial-gradient(rgba(255,255,255,.02) 1px,transparent 1px);
+  background-size:22px 22px;
+}
+#mapCanvas{display:block;image-rendering:pixelated;cursor:crosshair;}
+#mapCanvas.tool-pan{cursor:grab;}
+#mapCanvas.tool-pan.panning{cursor:grabbing;}
+#mapCanvas.tool-select{cursor:pointer;}
+
+#hover-coord{
+  position:absolute;bottom:8px;left:8px;
+  background:rgba(20,16,10,.85);border:1px solid var(--panel-border);
+  padding:3px 8px;font-size:11px;border-radius:3px;color:var(--parchment-dim);
+  pointer-events:none;
+}
+#zoom-controls{
+  position:absolute;top:8px;right:8px;display:flex;gap:4px;
+  background:rgba(20,16,10,.85);border:1px solid var(--panel-border);border-radius:4px;padding:4px;
+}
+
+/* ---------- Statusbar ---------- */
+#statusbar{
+  flex-shrink:0;background:var(--stone-950);border-top:1px solid var(--panel-border-lo);
+  padding:5px 14px;font-size:11.5px;color:var(--parchment-dim);
+  display:flex;gap:18px;
+}
+#statusbar b{color:var(--amber);}
+
+/* ---------- Inspector ---------- */
+.token-list-item{
+  display:flex;align-items:center;gap:8px;padding:6px 7px;border-radius:3px;
+  border:1px solid var(--panel-border-lo);margin-bottom:5px;cursor:pointer;background:var(--stone-800);
+}
+.token-list-item:hover{border-color:var(--amber);}
+.token-list-item.selected{border-color:var(--amber-hi);background:#3a2c17;}
+.tok-dot{width:16px;height:16px;border-radius:50%;border:1px solid rgba(0,0,0,.5);flex-shrink:0;}
+.token-list-item .tname{flex:1;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.token-list-item .tdel{color:var(--danger);font-size:13px;cursor:pointer;padding:0 3px;}
+.empty-note{color:var(--parchment-dim);font-size:12px;font-style:italic;text-align:center;padding:20px 6px;}
+
+/* ---------- Modal ---------- */
+.modal-overlay{
+  position:fixed;inset:0;background:rgba(8,6,4,.72);
+  display:flex;align-items:center;justify-content:center;z-index:50;
+}
+.modal-overlay.hidden{display:none;}
+.modal-box{
+  background:var(--stone-900);border:2px solid var(--panel-border);border-radius:6px;
+  width:380px;max-width:90vw;max-height:80vh;overflow-y:auto;
+  padding:18px 20px;box-shadow:0 12px 40px rgba(0,0,0,.6);
+}
+.modal-box h2{font-family:var(--font-display);color:var(--amber-hi);margin:0 0 12px;font-size:17px;}
+.modal-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:16px;}
+.saved-map-row{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:8px 9px;border:1px solid var(--panel-border-lo);border-radius:4px;margin-bottom:6px;background:var(--stone-800);
+}
+.saved-map-row .smname{font-size:13px;}
+.saved-map-row .smbtns{display:flex;gap:6px;}
+::-webkit-scrollbar{width:10px;height:10px;}
+::-webkit-scrollbar-track{background:var(--stone-950);}
+::-webkit-scrollbar-thumb{background:var(--stone-700);border-radius:5px;border:2px solid var(--stone-950);}
+</style>
+</head>
+<body>
+<div id="app">
+
+  <div id="topbar">
+    <h1>&#9876;&#65039; Cartographer's Table</h1>
+    <div class="topbar-group">
+      <button class="btn" id="btnNewMap">New Map</button>
+      <button class="btn" id="btnSave">Save</button>
+      <button class="btn" id="btnLoad">Load</button>
+      <button class="btn" id="btnExportPng">Export PNG</button>
+      <button class="btn" id="btnExportJson">Export JSON</button>
+      <button class="btn" id="btnImportJson">Import JSON</button>
+      <input type="file" id="fileImport" accept=".json" style="display:none">
+    </div>
+    <div class="spacer"></div>
+    <div class="topbar-group">
+      <button class="btn" id="btnUndo" title="Undo (Ctrl+Z)">&#8630; Undo</button>
+      <button class="btn toggle" id="btnDmPreview" title="Preview what players currently see, without leaving DM mode">Preview Lighting</button>
+      <button class="btn primary toggle" id="btnPlayerView">Player View</button>
+    </div>
+  </div>
+
+  <div id="main">
+    <div id="sidebar">
+      <div class="tabs">
+        <div class="tab active" data-panel="terrain">Terrain</div>
+        <div class="tab" data-panel="walls">Walls&nbsp;/&nbsp;Doors</div>
+        <div class="tab" data-panel="props">Props</div>
+        <div class="tab" data-panel="tokens">Tokens</div>
+        <div class="tab" data-panel="generate">Generate</div>
+        <div class="tab" data-panel="mapsettings">Map</div>
+      </div>
+
+      <div class="panel active" id="panel-terrain">
+        <div class="section-label">Paint Background</div>
+        <div class="swatch-grid" id="terrainSwatches"></div>
+        <div class="section-label">Brush</div>
+        <div class="row2">
+          <button class="btn small" id="brushSingle">Single Cell</button>
+          <button class="btn small" id="brushRect">Rectangle</button>
+        </div>
+        <div class="hint">Click-drag to paint. Rectangle brush: click-drag to fill an area.</div>
+      </div>
+
+      <div class="panel" id="panel-walls">
+        <div class="section-label">Structure</div>
+        <div class="swatch-grid">
+          <div class="swatch" data-tool="wall"><div class="chip" style="background:#4a4038;background-image:linear-gradient(135deg,#5a4f45,#2c2620)"></div>Wall</div>
+          <div class="swatch" data-tool="door"><div class="chip prop-icon" style="background:#6b4a2c">&#128682;</div>Door</div>
+          <div class="swatch" data-tool="eraser"><div class="chip" style="background:#111"></div>Erase</div>
+        </div>
+        <div class="hint">Walls block movement, sight and light. Doors block sight only while closed — click a placed door on the map to toggle it open/closed.</div>
+      </div>
+
+      <div class="panel" id="panel-props">
+        <div class="section-label">Place Prop</div>
+        <div class="swatch-grid" id="propSwatches"></div>
+        <div class="hint">Torches and any prop marked "light" cast illumination. Pillars &amp; statues block sight like a thin wall.</div>
+      </div>
+
+      <div class="panel" id="panel-tokens">
+        <div class="section-label">New Token</div>
+        <label class="field">Name</label>
+        <input type="text" id="newTokName" placeholder="e.g. Sir Aldric">
+        <label class="field">Type</label>
+        <select id="newTokType">
+          <option value="pc">Player Character</option>
+          <option value="npc">NPC / Ally</option>
+          <option value="monster">Monster / Enemy</option>
+          <option value="object">Object / Marker</option>
+        </select>
+        <div class="row2">
+          <div>
+            <label class="field">Color</label>
+            <input type="color" id="newTokColor" value="#4f8a79">
+          </div>
+          <div>
+            <label class="field">Size</label>
+            <select id="newTokSize">
+              <option value="0.6">Tiny</option>
+              <option value="1" selected>Small/Medium</option>
+              <option value="1.5">Large</option>
+              <option value="2">Huge</option>
+              <option value="3">Gargantuan</option>
+            </select>
+          </div>
+        </div>
+        <label class="field">Vision Radius: <span id="visionVal">6</span> squares (30ft)</label>
+        <input type="range" id="newTokVision" min="0" max="20" value="6">
+        <div class="check-row"><input type="checkbox" id="newTokDark"><label for="newTokDark">Darkvision (sees in the dark, no light needed)</label></div>
+        <div class="check-row"><input type="checkbox" id="newTokLight"><label for="newTokLight">Carries a light source</label></div>
+        <div id="tokLightRadiusWrap" style="display:none">
+          <label class="field">Light Radius: <span id="lightVal">4</span> squares</label>
+          <input type="range" id="newTokLightRadius" min="1" max="12" value="4">
+        </div>
+        <button class="btn primary full-btn" id="btnArmToken">Place on Map &#8594;</button>
+        <div class="hint" id="armHint" style="display:none">Click a cell on the map to place this token.</div>
+
+        <div class="section-label">Tokens on Map</div>
+        <div id="tokenList"></div>
+      </div>
+
+      <div class="panel" id="panel-generate">
+        <div class="section-label">Dungeon Generator</div>
+        <div class="row2">
+          <div><label class="field">Width</label><input type="number" id="genW" value="34" min="10" max="80"></div>
+          <div><label class="field">Height</label><input type="number" id="genH" value="24" min="10" max="60"></div>
+        </div>
+        <label class="field">Theme</label>
+        <select id="genTheme">
+          <option value="stone">Dungeon (stone)</option>
+          <option value="cave">Cave (natural)</option>
+          <option value="crypt">Crypt (dark stone)</option>
+          <option value="wood">Keep (wood floors)</option>
+        </select>
+        <label class="field">Room Count: <span id="genRoomsVal">10</span></label>
+        <input type="range" id="genRooms" min="3" max="24" value="10">
+        <div class="row2">
+          <div><label class="field">Min Room Size</label><input type="number" id="genRoomMin" value="4" min="3" max="12"></div>
+          <div><label class="field">Max Room Size</label><input type="number" id="genRoomMax" value="9" min="3" max="20"></div>
+        </div>
+        <label class="field">Pillar Density</label>
+        <select id="genPillars"><option value="0">None</option><option value="0.15">Sparse</option><option value="0.35" selected>Normal</option><option value="0.6">Dense</option></select>
+        <label class="field">Torch Density</label>
+        <select id="genTorches"><option value="0">None</option><option value="0.2">Sparse</option><option value="0.45" selected>Normal</option><option value="0.7">Dense</option></select>
+        <div class="row2">
+          <div><label class="field">Stairs Up</label><input type="number" id="genStairsUp" value="1" min="0" max="5"></div>
+          <div><label class="field">Stairs Down</label><input type="number" id="genStairsDown" value="1" min="0" max="5"></div>
+        </div>
+        <label class="field">Seed (optional — reuse for the same layout)</label>
+        <input type="text" id="genSeed" placeholder="leave blank for random">
+        <button class="btn primary full-btn" id="btnGenerate">&#127922; Generate Dungeon</button>
+        <div class="hint">Generating replaces the current layout (walls, floors, doors &amp; props). Existing tokens are kept in place.</div>
+      </div>
+
+      <div class="panel" id="panel-mapsettings">
+        <div class="section-label">Map Size</div>
+        <div class="row2">
+          <div><label class="field">Width</label><input type="number" id="mapW" min="10" max="100"></div>
+          <div><label class="field">Height</label><input type="number" id="mapH" min="10" max="80"></div>
+        </div>
+        <button class="btn full-btn" id="btnResize">Resize Map</button>
+        <div class="hint">Resizing keeps the top-left area of your map and clips or extends the rest.</div>
+        <div class="section-label">Fog Memory</div>
+        <button class="btn full-btn" id="btnClearFog">Reset Explored Fog</button>
+        <div class="hint">Forgets everywhere the party has already seen, so Player View starts fully dark again.</div>
+        <div class="section-label">About Lighting</div>
+        <div class="hint">In Player View, cells are pitch black until a token's vision reaches them <i>and</i> they're lit — by a torch/prop, or by a token carrying light. Tokens with darkvision see within their radius even unlit. Previously-seen cells stay dimly visible as memory once vision moves away, like a real party's recollection of a room.</div>
+      </div>
+    </div>
+
+    <div id="canvas-wrap">
+      <canvas id="mapCanvas"></canvas>
+      <div id="hover-coord">—</div>
+      <div id="zoom-controls">
+        <button class="btn small" id="zoomOut">&minus;</button>
+        <button class="btn small" id="zoomReset">100%</button>
+        <button class="btn small" id="zoomIn">&plus;</button>
+        <button class="btn small toggle" id="btnPanTool" title="Pan tool (or hold Space)">&#9995; Pan</button>
+      </div>
+    </div>
+
+    <div id="inspector">
+      <div class="section-label" style="margin-top:0">Selection</div>
+      <div id="inspectorBody"><div class="empty-note">Select a token on the map, or in the Tokens tab, to edit it here.</div></div>
+    </div>
+  </div>
+
+  <div id="statusbar">
+    <span>Tool: <b id="statTool">Terrain Brush</b></span>
+    <span>Map: <b id="statSize">—</b></span>
+    <span>Tokens: <b id="statTokens">0</b></span>
+    <span>View: <b id="statView">DM</b></span>
+  </div>
+</div>
+
+<div class="modal-overlay hidden" id="modalSave">
+  <div class="modal-box">
+    <h2>Save Map</h2>
+    <label class="field">Map Name</label>
+    <input type="text" id="saveNameInput" placeholder="e.g. Goblin Warren, Level 1">
+    <div class="modal-actions">
+      <button class="btn" id="saveCancelBtn">Cancel</button>
+      <button class="btn primary" id="saveConfirmBtn">Save</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay hidden" id="modalLoad">
+  <div class="modal-box">
+    <h2>Load Map</h2>
+    <div id="savedMapsList"></div>
+    <div class="modal-actions">
+      <button class="btn" id="loadCancelBtn">Close</button>
+    </div>
+  </div>
+</div>
+
+<script type="module" src="/src/main.ts"></script>
+</body>
+</html>
