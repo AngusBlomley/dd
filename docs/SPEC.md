@@ -61,6 +61,7 @@ Taken from the call. **Must** = needed before the group uses it at the table. **
 - R16. More props: fungus lantern, brazier, campfire, glowing crystal, glowing mushroom cluster (light-emitting), cage, boat, bridge, rope, cart, well, mushroom (large, blocks sight), stalagmite (blocks), portcullis (door variant), ladder, trapdoor, secret door (DM-only until revealed).
 - R17. Token types stay free-form (PC / NPC / Monster / Object) with colour, size, vision and light. Add "hidden" flag for DM-only tokens. Players see tokens as colour plus initials only, no names.
 - R18. Generator gains a cave theme that produces organic caverns (cellular automata) rather than rectangular rooms.
+- R18a. Each generation becomes a new map in the campaign, so earlier maps and the tokens on them are kept; an option overwrites the current map instead. Issue #6.
 
 ### 3.4 Multiplayer session — Should (Prototype 3)
 
@@ -73,10 +74,13 @@ Taken from the call. **Must** = needed before the group uses it at the table. **
 - R25. Works with 8 players on any mix of phones and laptops, on the same Wi-Fi or on mobile data.
 - R25a. No hosted backend. The session runs from the DM's own device or from a PC on the group's network, like a Minecraft server. Nothing about a session is stored anywhere but the DM's device.
 - R25b. Linked maps: an Exit prop on one map leads to an Entry on another. A character standing on an exit waits there until the DM sends them through; the player's screen says so. Players see the map their character is on.
+- R25c. Each map has a "next map"; exits without a link of their own lead there, arriving at its first Entry or first open cell. The DM map labels every exit with where it leads, and a banner over the map with a Send Through button appears whenever a character is waiting at one. Issue #7.
+- R25d. Joining shows progress (looking for the host, connecting, waiting for the DM) and errors in place, with the Join button disabled meanwhile. Issue #5.
 
 ### 3.5 Turns and player movement — Later (Prototype 4)
 
 - R26. The DM marks whose turn it is. Only that player can drag their own token. Movement is blocked by walls, closed doors, blocking props and other characters, and players can only path through cells they can see or remember. A character can never pass through another creature's cell or slip diagonally between two of them. Issue #4.
+- R26a. A player can open or close a door next to their character by tapping it, in any movement mode; closed secret doors still read as walls. Issue #8.
 - R27. Movement budget per turn (default 30 ft, 5 ft per cell, diagonals cost one cell); the player's top bar shows what is left. A "Next turn" button cycles through assigned players in join order. Three modes: DM moves everyone, turn-based, or free movement.
 - R28. When a player is assigned a character, or their character changes map, their screen centres on it; a Find Me button recentres at any time. The Session tab's character dropdowns always include tokens placed after the tab was opened.
 

@@ -14,6 +14,7 @@ export interface MapFile {
   format: number;
   id?: string;
   name?: string;
+  nextMapId?: string | null;
   gridW: number;
   gridH: number;
   cells: Cell[];
@@ -25,6 +26,7 @@ export interface MapFile {
 export interface MapRecord {
   id: string;
   name: string;
+  nextMapId?: string | null; // where unlinked exits lead
   grid: Grid;
   tokens: Token[];
   nextTokenId: number;
@@ -51,7 +53,7 @@ export function newId(): string {
 
 export function serializeMap(map: MapRecord): MapFile {
   return {
-    format: MAP_FORMAT, id: map.id, name: map.name,
+    format: MAP_FORMAT, id: map.id, name: map.name, nextMapId: map.nextMapId ?? null,
     gridW: map.grid.w, gridH: map.grid.h, cells: map.grid.cells,
     tokens: map.tokens, nextTokenId: map.nextTokenId, savedAt: Date.now(),
   };
@@ -108,6 +110,7 @@ export function parseMap(data: Partial<MapFile>, fallbackName = 'Untitled map'):
   return {
     id: data.id || newId(),
     name: data.name || fallbackName,
+    nextMapId: typeof data.nextMapId === 'string' ? data.nextMapId : null,
     grid: { w: data.gridW, h: data.gridH, cells },
     tokens,
     nextTokenId: data.nextTokenId || (tokens.length + 1),

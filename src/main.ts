@@ -5,7 +5,8 @@ import { initInteraction, initZoomAndViews } from './ui/interaction';
 import { initGeneratorPanel, initLayersPanel, initMapSettings } from './ui/panels';
 import { setSaveStatus, setStatus } from './ui/status';
 import { session } from './net/host';
-import { initSessionPanel } from './ui/sessionPanel';
+import { markChanged, state } from './state';
+import { initSessionPanel, renderExitBanner } from './ui/sessionPanel';
 import { initBrushButtons, initSwatches, initTabs } from './ui/swatches';
 import { initTokenForm, renderInspector, renderTokenList } from './ui/tokens';
 
@@ -27,6 +28,8 @@ async function main(): Promise<void> {
   await bootCampaign();
   initAutosave();
   void session.resume();
+  // Debug handle for tests and the browser console; never used by the app itself.
+  (window as unknown as { __ct: unknown }).__ct = { state, session, markChanged, renderExitBanner };
 
   renderMapList();
   setStatus();

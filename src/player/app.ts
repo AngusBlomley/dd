@@ -124,6 +124,16 @@ function cellAtClient(clientX: number, clientY: number): { x: number; y: number 
   return x >= 0 && y >= 0 && x < view.w && y < view.h ? { x, y } : null;
 }
 
+/** A tap on a door next to your character opens or closes it (issue #8). */
+function tapCell(x: number, y: number): void {
+  const t = myToken();
+  if (!t || !view) return;
+  const cell = view.cells[y * view.w + x];
+  if (!cell || !cell.d) return;
+  if (Math.max(Math.abs(t.x - x), Math.abs(t.y - y)) > 1) { toast('You need to be next to the door.'); return; }
+  transport?.send({ type: 'door', tokenId: t.id, x, y });
+}
+
 function requestMove(x: number, y: number): void {
   const t = myToken();
   if (!t || !assignment?.canMove) return;
@@ -184,7 +194,13 @@ function initGestures(): void {
       else { picking = !picking; }          // a tap on your own token arms tap-to-move
       dragging = null; moveTarget = null; requestPaint();
     }
-    if (pointers.size === 0) pan = null;
+    if (pan && pointers.size === 0) {
+      if (Math.hypot(e.clientX - pan.x, e.clientY - pan.y) < 6) {
+        const cell = cellAtClient(e.clientX, e.clientY);
+        if (cell) tapCell(cell.x, cell.y);
+      }
+      pan = null;
+    }
   };
   canvas.addEventListener('pointerup', up);
   canvas.addEventListener('pointercancel', up);
@@ -248,6 +264,8 @@ const DENIALS: Record<MoveDenial, string> = {
   'too-far': 'Too far.',
   'no-path': 'No way through that you can see.',
   'out-of-bounds': 'Off the map.',
+  'not-adjacent': 'You need to be next to the door.',
+  'not-a-door': 'There is no door there.',
 };
 
 /* ---------- connection ---------- */
@@ -270,6 +288,7 @@ function onHostMessage(raw: unknown): void {
     case 'snapshot':
       if (!view || view.mapId !== m.view.mapId) { fitted = false; pendingCenter = true; }
       view = m.view;
+      $('pWaiting').hidden = true;
       updateBanner();
       requestPaint();
       break;
@@ -293,24 +312,36 @@ function onHostMessage(raw: unknown): void {
   }
 }
 
+function joinFeedback(text: string, busy: boolean, kind: 'info' | 'bad' = 'info'): void {
+  const el = $('pJoinStatus');
+  el.innerHTML = (busy ? '<span class="spinner"></span> ' : '') + text;
+  el.className = 'pjoin-status ' + kind;
+  $<HTMLButtonElement>('pJoinBtn').disabled = busy;
+}
+
 async function join(code: string, name: string): Promise<void> {
+  joinFeedback('Looking for the host…', true);
   const lan = await relayAvailable();
   transport = lan ? new RelayClient() : new PeerClient();
   transport.onMessage(onHostMessage);
   transport.onStatus((s: ClientStatus, detail?: string) => {
     if (s === 'connected') { setStatus('Connected'); transport?.send({ type: 'hello', playerId: playerId(), name }); }
-    else if (s === 'connecting') setStatus('Connecting…', 'warn');
+    else if (s === 'connecting') { setStatus('Connecting…', 'warn'); joinFeedback('Connecting to room ' + code + '…', true); }
     else if (s === 'reconnecting') setStatus(detail || 'Connection lost. Reconnecting…', 'warn');
-    else if (s === 'no-room') setStatus('No room with code ' + code + '. Check the code with your DM.', 'bad');
+    else if (s === 'no-room') { setStatus('No room with code ' + code + '.', 'bad'); joinFeedback('No room with code ' + code + '. Check the code with your DM.', false, 'bad'); }
     else if (s === 'closed') setStatus('Disconnected.', 'bad');
   });
-  $('pJoin').hidden = true;
-  $('pMain').hidden = false;
   try {
     await transport.connect(code);
+    joinFeedback('', false);
+    $('pJoin').hidden = true;
+    $('pMain').hidden = false;
+    $('pWaiting').hidden = false;
   } catch (err) {
     console.error(err);
-    if (String((err as Error).message) !== 'no-room') setStatus('Could not connect. ' + (lan ? 'Is the host still running?' : 'Check your internet connection and the code.'), 'bad');
+    if (String((err as Error).message) !== 'no-room') {
+      joinFeedback('Could not connect. ' + (lan ? 'Is the host still running?' : 'Check your internet connection and the code.'), false, 'bad');
+    }
     $('pJoin').hidden = false;
     $('pMain').hidden = true;
   }
@@ -342,6 +373,6 @@ export function startPlayerApp(codeFromUrl: string | null): void {
   $('pJoinBtn').addEventListener('click', go);
   nameEl.addEventListener('keydown', (e) => { if (e.key === 'Enter') go(); });
   codeEl.addEventListener('keydown', (e) => { if (e.key === 'Enter') go(); });
-  $('pLeave').addEventListener('click', () => { transport?.close(); transport = null; view = null; $('pMain').hidden = true; $('pJoin').hidden = false; });
+  $('pLeave').addEventListener('click', () => { transport?.close(); transport = null; view = null; $('pMain').hidden = true; $('pJoin').hidden = false; joinFeedback('', false); });
   (codeFromUrl ? nameEl : codeEl).focus();
 }

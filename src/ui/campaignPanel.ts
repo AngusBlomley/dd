@@ -2,7 +2,7 @@
    import, export, delete campaigns). Also PNG export. */
 
 import {
-  addMap, duplicateMap, newCampaign, newMapRecord, openCampaign, removeMap, renameCampaign, renameMap, saveNow, switchMap,
+  addMap, duplicateMap, newCampaign, newMapRecord, openCampaign, removeMap, renameCampaign, renameMap, saveNow, setNextMap, switchMap,
 } from '../campaign';
 import { canvas, render, requestRender } from '../render/canvas';
 import { state } from '../state';
@@ -57,9 +57,17 @@ export function renderMapList(): void {
     row.addEventListener('click', () => { if (m.id !== state.mapId) { switchMap(m.id); afterMapSwitch(); } });
     el.appendChild(row);
   }
+  const cur = c.maps.find(m => m.id === state.mapId);
+  const sel = $<HTMLSelectElement>('nextMapSel');
+  sel.innerHTML = '<option value="">— none —</option>' + c.maps.filter(m => m.id !== state.mapId).map(m => `<option value="${m.id}"${cur?.nextMapId === m.id ? ' selected' : ''}>${escapeHtml(m.name)}</option>`).join('');
 }
 
 export function initMapsPanel(): void {
+  $('nextMapSel').addEventListener('change', (e) => {
+    if (!state.mapId) return;
+    setNextMap(state.mapId, (e.target as HTMLSelectElement).value || null);
+    requestRender(); renderInspector();
+  });
   $('btnNewMap').addEventListener('click', () => {
     const name = prompt('Name for the new map', 'Map ' + ((state.campaign?.maps.length ?? 0) + 1));
     if (name === null) return;

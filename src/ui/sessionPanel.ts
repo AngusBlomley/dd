@@ -2,7 +2,7 @@
    list players, assign tokens, movement mode and turns, and send
    characters through linked exits. */
 
-import { mapById, transferToken } from '../campaign';
+import { mapById, resolveExit, transferToken } from '../campaign';
 import { session } from '../net/host';
 import type { MoveMode } from '../net/protocol';
 import { relayAvailable } from '../net/transport';
@@ -106,20 +106,44 @@ export function renderSessionPanel(): void {
 
 /** Moves a PC through the exit it is standing on. Shared with the inspector. */
 export function sendThrough(mapId: string, tokenId: number): void {
-  const m = mapById(mapId);
-  const t = m?.tokens.find(t => t.id === tokenId);
-  if (!m || !t) return;
-  const cell = m.grid.cells[t.y * m.grid.w + t.x];
-  if (!cell?.link) return;
-  const newId = transferToken(mapId, tokenId, cell.link.mapId, cell.link.x, cell.link.y);
+  const rec = mapById(mapId);
+  if (!rec) return;
+  const m = rec.id === state.mapId ? { ...rec, grid: state.grid, tokens: state.tokens } : rec;
+  const t = m.tokens.find(t => t.id === tokenId);
+  if (!t) return;
+  const r = resolveExit(m, t.x, t.y);
+  if (!r) { alert('This exit leads nowhere yet. Link it, or set a next map in the Maps tab.'); return; }
+  const newId = transferToken(mapId, tokenId, r.map.id, r.x, r.y);
   if (newId === null) { alert('Could not send the token through. Check the exit link.'); return; }
-  session.retarget(mapId, tokenId, cell.link.mapId, newId);
+  session.retarget(mapId, tokenId, r.map.id, newId);
   refreshDm();
+}
+
+/** A strip over the map whenever a character is waiting at an exit (issue #7). */
+export function renderExitBanner(): void {
+  const el = $('exitBanner');
+  const waiting = session.waitingAtExits();
+  el.innerHTML = '';
+  el.hidden = waiting.length === 0;
+  for (const w of waiting) {
+    const row = document.createElement('div');
+    row.className = 'exit-banner-row';
+    const dest = w.to ? escapeHtml(w.to.name) : 'nowhere yet';
+    row.innerHTML = `<span><b>${escapeHtml(w.tokenName)}</b>${w.playerName ? ' (' + escapeHtml(w.playerName) + ')' : ''} is at the exit${w.mapId !== state.mapId ? ' on ' + escapeHtml(w.mapName) : ''} → ${dest}</span>`;
+    const btn = document.createElement('button');
+    btn.className = 'btn small primary'; btn.textContent = w.to ? 'Send through' : 'Set next map…';
+    btn.addEventListener('click', () => {
+      if (w.to) sendThrough(w.mapId, w.tokenId);
+      else document.querySelector<HTMLElement>('.tab[data-panel=maps]')?.click();
+    });
+    row.appendChild(btn);
+    el.appendChild(row);
+  }
 }
 
 /** Redraws the DM's map and lists after something a player did. */
 function refreshDm(): void {
-  renderTokenList(); renderInspector(); requestRender(); setStatus(); renderSessionPanel();
+  renderTokenList(); renderInspector(); requestRender(); setStatus(); renderSessionPanel(); renderExitBanner();
 }
 
 export function initSessionPanel(): void {
@@ -130,7 +154,7 @@ export function initSessionPanel(): void {
   });
   $('btnStartSession').addEventListener('click', async () => {
     const btn = $<HTMLButtonElement>('btnStartSession');
-    btn.disabled = true; btn.textContent = 'Starting…';
+    btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Starting…';
     try { await session.start(); }
     catch (err) { console.error(err); alert('Could not start the session: ' + ((err as Error).message || err)); }
     finally { btn.disabled = false; btn.textContent = 'Start session'; }
@@ -159,8 +183,13 @@ export function initSessionPanel(): void {
   document.querySelector('.tab[data-panel=session]')!.addEventListener('click', renderSessionPanel);
   let pending: number | null = null;
   onChange(() => {
-    if (!panelVisible() || pending !== null) return;
-    pending = window.setTimeout(() => { pending = null; if (document.activeElement?.closest('#panel-session')) return; renderSessionPanel(); }, 250);
+    if (pending !== null) return;
+    pending = window.setTimeout(() => {
+      pending = null;
+      renderExitBanner();
+      if (panelVisible() && !document.activeElement?.closest('#panel-session')) renderSessionPanel();
+    }, 250);
   });
   renderSessionPanel();
+  renderExitBanner();
 }

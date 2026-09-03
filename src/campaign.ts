@@ -135,6 +135,44 @@ export function entriesOf(map: MapRecord): { x: number; y: number }[] {
   return out;
 }
 
+export function setNextMap(mapId: string, nextMapId: string | null): void {
+  const m = mapById(mapId);
+  if (!m) return;
+  m.nextMapId = nextMapId && nextMapId !== mapId ? nextMapId : null;
+  requestSave();
+}
+
+/** The first Entry on a map, else the first walkable cell, else null. */
+export function arrivalCell(map: MapRecord): { x: number; y: number } | null {
+  const entries = entriesOf(map);
+  if (entries.length) return entries[0];
+  for (let i = 0; i < map.grid.cells.length; i++) {
+    const c = map.grid.cells[i];
+    if (!c.w && !c.d && !c.p && c.t !== 'void' && c.t !== 'chasm') return { x: i % map.grid.w, y: Math.floor(i / map.grid.w) };
+  }
+  return null;
+}
+
+/**
+ * Where an exit leads: its own link if it has one, otherwise the map's
+ * "next map" and that map's arrival cell. Null if it leads nowhere yet.
+ */
+export function resolveExit(map: MapRecord, x: number, y: number): { map: MapRecord; x: number; y: number } | null {
+  const c = state.campaign;
+  const cell = map.grid.cells[y * map.grid.w + x];
+  if (!c || !cell || cell.p !== 'exit') return null;
+  if (cell.link) {
+    const target = c.maps.find(m => m.id === cell.link!.mapId);
+    return target ? { map: target, x: cell.link.x, y: cell.link.y } : null;
+  }
+  if (map.nextMapId) {
+    const target = c.maps.find(m => m.id === map.nextMapId);
+    const at = target ? arrivalCell(target) : null;
+    return target && at ? { map: target, x: at.x, y: at.y } : null;
+  }
+  return null;
+}
+
 /**
  * Moves a token from one map to a cell on another. Returns the token's id on
  * the target map (ids are per map), or null if anything was missing.

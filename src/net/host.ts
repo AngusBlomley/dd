@@ -4,8 +4,8 @@
    the only writer: every player move is validated here first. */
 
 import { computeScene, markExplored, UNSEEN, type Scene } from '../engine/lighting';
-import { validateMove, type MoveRules } from '../engine/movement';
-import { requestSave } from '../campaign';
+import { canOperateDoor, validateMove, type MoveDenial, type MoveRules } from '../engine/movement';
+import { requestSave, resolveExit } from '../campaign';
 import { markChanged, onChange, pushUndo, scene as activeScene, state } from '../state';
 import type { MapRecord } from '../store/json';
 import { PeerHost } from './peerTransport';
@@ -136,6 +136,39 @@ class HostSession {
       return;
     }
     if (msg.type === 'move') { this.onMoveRequest(peerId, msg); return; }
+    if (msg.type === 'door') { this.onDoorRequest(peerId, msg); return; }
+  }
+
+  /** The player, their map and token for a request, or null (after a denial) if not assigned. */
+  private requester(peerId: string, tokenId: number): { p: PlayerRec; map: MapRecord; token: import('../engine/data').Token } | null {
+    const pid = this.peerToPlayer.get(peerId);
+    const p = pid ? this.players.get(pid) : null;
+    const c = state.campaign;
+    if (!p || !c) return null;
+    if (p.tokenId === null || p.tokenId !== tokenId || !p.mapId) { this.deny(peerId, p, 'not-your-token'); return null; }
+    const map = c.maps.find(m => m.id === p.mapId);
+    const token = map?.tokens.find(t => t.id === p.tokenId);
+    if (!map || !token) { this.deny(peerId, p, 'not-your-token'); return null; }
+    return { p, map, token };
+  }
+
+  private deny(peerId: string, p: PlayerRec, reason: MoveDenial): void {
+    this.send({ type: 'move-denied', reason, movementLeft: this.turnPlayerId === p.playerId ? this.movementLeft : null }, peerId);
+  }
+
+  /** A player opens or closes a door next to their character (issue #8). */
+  private onDoorRequest(peerId: string, msg: { tokenId: number; x: number; y: number }): void {
+    const r = this.requester(peerId, msg.tokenId);
+    if (!r) return;
+    const { p, map, token } = r;
+    const x = msg.x | 0, y = msg.y | 0;
+    const check = canOperateDoor(map.grid, token, x, y);
+    if (!check.ok) { this.deny(peerId, p, check.reason); return; }
+    const cell = map.grid.cells[y * map.grid.w + x];
+    if (map.id === state.mapId) pushUndo();
+    cell.doOpen = !cell.doOpen;
+    if (map.id === state.mapId) markChanged(); else { requestSave(); this.scheduleRefresh(); }
+    this.emit();
   }
 
   /* ---------- assignments ---------- */
@@ -214,16 +247,10 @@ class HostSession {
   }
 
   private onMoveRequest(peerId: string, msg: { tokenId: number; x: number; y: number }): void {
-    const pid = this.peerToPlayer.get(peerId);
-    const p = pid ? this.players.get(pid) : null;
-    const c = state.campaign;
-    if (!p || !c) return;
-    const deny = (reason: 'not-your-token' | 'not-your-turn' | 'blocked' | 'too-far' | 'no-path' | 'out-of-bounds') =>
-      this.send({ type: 'move-denied', reason, movementLeft: this.turnPlayerId === p.playerId ? this.movementLeft : null }, peerId);
-    if (p.tokenId === null || p.tokenId !== msg.tokenId || !p.mapId) { deny('not-your-token'); return; }
-    const map = c.maps.find(m => m.id === p.mapId);
-    const token = map?.tokens.find(t => t.id === p.tokenId);
-    if (!map || !token) { deny('not-your-token'); return; }
+    const r = this.requester(peerId, msg.tokenId);
+    if (!r) return;
+    const { p, map, token } = r;
+    const deny = (reason: MoveDenial) => this.deny(peerId, p, reason);
     const x = msg.x | 0, y = msg.y | 0;
     const sc = this.sceneFor(map);
     const allowed = (cx: number, cy: number) => {
@@ -274,9 +301,9 @@ class HostSession {
       let token = map && p.tokenId !== null ? map.tokens.find(t => t.id === p.tokenId) : undefined;
       if (!token) { map = undefined; p.mapId = null; p.tokenId = null; }
       const shown = map ?? c.maps.find(m => m.id === state.mapId) ?? c.maps[0];
-      const cell = token && map ? map.grid.cells[token.y * map.grid.w + token.x] : null;
-      const atExit = !!(cell && cell.p === 'exit' && cell.link);
-      const target = atExit && cell?.link ? c.maps.find(m => m.id === cell.link!.mapId) : undefined;
+      const exit = token && map ? resolveExit(map, token.x, token.y) : null;
+      const atExit = !!exit;
+      const target = exit?.map;
       const yourTurn = this.moveMode === 'turn' && this.turnPlayerId === p.playerId;
       const assignment: Assignment = {
         mapId: shown.id, tokenId: token ? token.id : null, atExit, exitLabel: target?.name,
@@ -306,13 +333,14 @@ class HostSession {
     if (!c) return [];
     const out = [];
     for (const m of c.maps) {
-      for (const t of m.tokens) {
+      const live = m.id === state.mapId ? { ...m, grid: state.grid, tokens: state.tokens } : m;
+      for (const t of live.tokens) {
         if (t.type !== 'pc') continue;
-        const cell = m.grid.cells[t.y * m.grid.w + t.x];
-        if (!cell || cell.p !== 'exit' || !cell.link) continue;
-        const to = c.maps.find(x => x.id === cell.link!.mapId) ?? null;
+        const cell = live.grid.cells[t.y * live.grid.w + t.x];
+        if (!cell || cell.p !== 'exit') continue;
+        const r = resolveExit(live, t.x, t.y);
         const owner = [...this.players.values()].find(p => p.mapId === m.id && p.tokenId === t.id);
-        out.push({ mapId: m.id, mapName: m.name, tokenId: t.id, tokenName: t.name, to, link: { x: cell.link.x, y: cell.link.y }, playerName: owner?.name ?? null });
+        out.push({ mapId: m.id, mapName: m.name, tokenId: t.id, tokenName: t.name, to: r ? r.map : null, link: r ? { x: r.x, y: r.y } : null, playerName: owner?.name ?? null });
       }
     }
     return out;

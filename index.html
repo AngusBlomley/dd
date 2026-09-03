@@ -226,6 +226,13 @@ input[type=range]{width:100%;}
 .player-row .turn-badge{font-size:10.5px;color:var(--amber-hi);background:#3a2c17;padding:1px 6px;border-radius:2px;white-space:nowrap;}
 .pturn{font-size:11.5px;color:var(--parchment-dim);}
 .pturn.can{color:var(--amber-hi);font-weight:600;}
+.spinner{display:inline-block;width:13px;height:13px;border:2px solid rgba(230,215,171,.25);border-top-color:var(--amber-hi);border-radius:50%;vertical-align:-2px;animation:spin .8s linear infinite;}
+@keyframes spin{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion:reduce){.spinner{animation-duration:2s}}
+.pjoin-status.bad{color:var(--danger);}
+#pWaiting{position:sticky;left:0;top:0;display:block;text-align:center;padding:16px;color:var(--parchment-dim);font-size:14px;}
+#exitBanner{position:absolute;top:8px;left:8px;right:200px;display:flex;flex-direction:column;gap:6px;z-index:5;}
+.exit-banner-row{display:flex;align-items:center;justify-content:space-between;gap:12px;background:rgba(58,44,23,.94);border:1px solid var(--amber);border-radius:4px;padding:7px 12px;font-size:13px;color:var(--parchment);box-shadow:0 4px 14px rgba(0,0,0,.4);}
 #pToast{position:sticky;left:50%;bottom:14px;transform:translateX(-50%);display:inline-block;background:rgba(20,16,10,.92);border:1px solid var(--amber);color:var(--parchment);padding:7px 14px;border-radius:4px;font-size:13px;pointer-events:none;}
 .exit-row{display:flex;align-items:center;justify-content:space-between;gap:8px;border:1px solid var(--panel-border-lo);border-radius:3px;padding:7px 8px;margin-bottom:6px;background:var(--stone-800);font-size:12.5px;}
 .callout-small{font-size:12px;color:var(--parchment);background:var(--stone-800);border-left:3px solid var(--amber);padding:6px 8px;margin:10px 0 6px;border-radius:0 3px 3px 0;}
@@ -399,7 +406,8 @@ body.player-mode{overflow:hidden;}
         <label class="field">Seed (optional — reuse for the same layout)</label>
         <input type="text" id="genSeed" placeholder="leave blank for random">
         <button class="btn primary full-btn" id="btnGenerate">&#127922; Generate Dungeon</button>
-        <div class="hint">Generating replaces the current map's layout (walls, floors, doors &amp; props). Existing tokens are kept in place. Undo brings the old layout back.</div>
+        <div class="check-row"><input type="checkbox" id="genReplace"><label for="genReplace">Replace the current map instead (keeps its tokens)</label></div>
+        <div class="hint">Each generation becomes a new map in the campaign, listed in the Maps tab, so earlier maps and the tokens on them stay as they were. Tick the box to overwrite the current map's layout instead; Undo brings it back.</div>
       </div>
 
       <div class="panel" id="panel-maps">
@@ -414,6 +422,9 @@ body.player-mode{overflow:hidden;}
         <div class="hint">Everything saves automatically on this device. Use Switch / manage to export a campaign as a backup or move it to another device.</div>
         <div class="section-label">Maps in this campaign</div>
         <div id="mapList"></div>
+        <label class="field">Exits on this map lead to</label>
+        <select id="nextMapSel"></select>
+        <div class="hint">The "next map" for any Exit prop that has no link of its own. Characters sent through arrive at the first Entry there, or the first open cell.</div>
         <button class="btn primary full-btn" id="btnNewMap">+ New Map</button>
         <div class="row2" style="margin-top:8px">
           <button class="btn small" id="btnDuplicateMap">Duplicate</button>
@@ -498,6 +509,7 @@ body.player-mode{overflow:hidden;}
 
     <div id="canvas-wrap">
       <canvas id="mapCanvas"></canvas>
+      <div id="exitBanner" hidden></div>
       <div id="hover-coord">—</div>
       <div id="zoom-controls">
         <button class="btn small" id="zoomOut">&minus;</button>
@@ -549,7 +561,7 @@ body.player-mode{overflow:hidden;}
       <button class="btn small" id="pZoomIn">&plus;</button>
       <button class="btn small" id="pLeave">Leave</button>
     </div>
-    <div id="pWrap"><canvas id="playerCanvas"></canvas><div id="pToast" hidden></div></div>
+    <div id="pWrap"><canvas id="playerCanvas"></canvas><div id="pWaiting" hidden><span class="spinner"></span> Waiting for the DM…</div><div id="pToast" hidden></div></div>
     <div id="pBanner" hidden></div>
   </div>
 </div>

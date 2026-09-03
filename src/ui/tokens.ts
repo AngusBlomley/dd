@@ -3,7 +3,7 @@
 import {
   DARKVISION_OPTIONS, DEFAULT_TOKEN_LIGHT, TOKEN_TYPE_COLORS, type Token, type TokenType,
 } from '../engine/data';
-import { entriesOf, mapById } from '../campaign';
+import { entriesOf, mapById, resolveExit } from '../campaign';
 import { cellAt } from '../engine/grid';
 import { requestRender } from '../render/canvas';
 import { markChanged, pushUndo, state } from '../state';
@@ -144,17 +144,18 @@ export function renderInspector(): void {
     <button class="btn danger full-btn" id="insDelete" style="margin-top:14px">Remove Token</button>`;
 
   const here = cellAt(state.grid, tok.x, tok.y);
-  if (here && here.p === 'exit' && state.mapId) {
-    const target = here.link ? mapById(here.link.mapId) : undefined;
+  const rec = state.mapId ? mapById(state.mapId) : undefined;
+  if (here && here.p === 'exit' && rec) {
+    const r = resolveExit({ ...rec, grid: state.grid, tokens: state.tokens }, tok.x, tok.y);
     const box = $('insExit');
-    if (tok.type === 'pc' && target) {
-      box.innerHTML = `<div class="callout-small">Standing at an exit to <b>${escapeHtml(target.name)}</b>.</div>`;
+    if (tok.type === 'pc' && r) {
+      box.innerHTML = `<div class="callout-small">Standing at an exit to <b>${escapeHtml(r.map.name)}</b>.</div>`;
       const b = document.createElement('button');
-      b.className = 'btn primary full-btn'; b.textContent = 'Send through to ' + target.name;
+      b.className = 'btn primary full-btn'; b.textContent = 'Send through to ' + r.map.name;
       b.addEventListener('click', () => sendThrough(state.mapId!, tok.id));
       box.appendChild(b);
-    } else if (!here.link) {
-      box.innerHTML = '<div class="callout-small">This exit has no link yet. Deselect, then click the exit cell with the Select tool to link it.</div>';
+    } else if (!r) {
+      box.innerHTML = '<div class="callout-small">This exit leads nowhere yet. Link it with the Select tool, or set a next map in the Maps tab.</div>';
     }
   }
 
@@ -223,9 +224,9 @@ function renderCellInspector(body: HTMLElement, x: number, y: number): void {
   const link = cell.link ?? null;
   const mapOpts = c.maps.map(m => `<option value="${m.id}"${link && link.mapId === m.id ? ' selected' : ''}>${escapeHtml(m.name)}${m.id === state.mapId ? ' (this map)' : ''}</option>`).join('');
   body.innerHTML = `
-    <div class="callout-small"><b>Exit</b> at (${x}, ${y}). A character standing here waits until you send them through.</div>
+    <div class="callout-small"><b>Exit</b> at (${x}, ${y}). A character standing here waits until you send them through.${(() => { const rec = state.mapId ? mapById(state.mapId) : undefined; const r = rec ? resolveExit({ ...rec, grid: state.grid, tokens: state.tokens }, x, y) : null; return r ? ' Currently leads to <b>' + escapeHtml(r.map.name) + '</b>' + (link ? '' : ' (the map\'s next map)') + '.' : ' It leads nowhere yet.'; })()}</div>
     <label class="field">Leads to map</label>
-    <select id="exitMap"><option value="">— not linked —</option>${mapOpts}</select>
+    <select id="exitMap"><option value="">— use the map's next map —</option>${mapOpts}</select>
     <label class="field">Arrives at</label>
     <select id="exitEntry"></select>
     <div class="hint">Place an Entry prop on the target map to get arrival points here, or pick a cell by coordinates.</div>

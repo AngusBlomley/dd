@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Token } from '../src/engine/data';
 import { cellAt, createGrid } from '../src/engine/grid';
-import { findPath, isPassable, validateMove } from '../src/engine/movement';
+import { canOperateDoor, findPath, isPassable, validateMove } from '../src/engine/movement';
 
 function pc(id: number, x: number, y: number, extra: Partial<Token> = {}): Token {
   return { id, name: 'T' + id, type: 'pc', x, y, color: '#fff', size: 1, vision: { radius: 12, darkvision: 0 }, light: null, ...extra };
@@ -126,5 +126,21 @@ describe('validateMove (spec R26)', () => {
     expect(validateMove(g, tokens, me, 20, 1, rules, anywhere)).toEqual({ ok: false, reason: 'out-of-bounds' });
     // the party has only explored x <= 4
     expect(validateMove(g, tokens, me, 6, 1, rules, (x) => x <= 4)).toEqual({ ok: false, reason: 'no-path' });
+  });
+});
+
+describe('canOperateDoor (issue #8)', () => {
+  it('needs an adjacent, player-visible door', () => {
+    const g = createGrid(6, 3, 'stone');
+    const door = cellAt(g, 3, 1)!; door.d = true;
+    const secret = cellAt(g, 5, 1)!; secret.d = true; secret.secret = true;
+    expect(canOperateDoor(g, pc(1, 2, 1), 3, 1)).toEqual({ ok: true });      // orthogonal
+    expect(canOperateDoor(g, pc(1, 2, 0), 3, 1)).toEqual({ ok: true });      // diagonal
+    expect(canOperateDoor(g, pc(1, 0, 1), 3, 1)).toEqual({ ok: false, reason: 'not-adjacent' });
+    expect(canOperateDoor(g, pc(1, 2, 1), 2, 0)).toEqual({ ok: false, reason: 'not-a-door' });
+    expect(canOperateDoor(g, pc(1, 4, 1), 5, 1)).toEqual({ ok: false, reason: 'not-a-door' }); // closed secret door reads as wall
+    secret.doOpen = true;
+    expect(canOperateDoor(g, pc(1, 4, 1), 5, 1)).toEqual({ ok: true });      // revealed by opening
+    expect(canOperateDoor(g, pc(1, 2, 1), 9, 9)).toEqual({ ok: false, reason: 'out-of-bounds' });
   });
 });

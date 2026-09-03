@@ -76,7 +76,20 @@ export function findPath(grid: Grid, x0: number, y0: number, x1: number, y1: num
   return path.reverse();
 }
 
-export type MoveDenial = 'not-your-token' | 'not-your-turn' | 'blocked' | 'too-far' | 'no-path' | 'out-of-bounds';
+export type MoveDenial = 'not-your-token' | 'not-your-turn' | 'blocked' | 'too-far' | 'no-path' | 'out-of-bounds' | 'not-adjacent' | 'not-a-door';
+
+/**
+ * Can this token open or close the door at (x, y)? It must be next to it
+ * (straight or diagonal) and the door must be one the players could know about:
+ * a closed secret door still reads as a wall to them.
+ */
+export function canOperateDoor(grid: Grid, token: Token, x: number, y: number): { ok: true } | { ok: false; reason: MoveDenial } {
+  const c = cellAt(grid, x, y);
+  if (!c) return { ok: false, reason: 'out-of-bounds' };
+  if (!c.d || (c.secret && !c.doOpen)) return { ok: false, reason: 'not-a-door' };
+  if (Math.max(Math.abs(token.x - x), Math.abs(token.y - y)) > 1) return { ok: false, reason: 'not-adjacent' };
+  return { ok: true };
+}
 
 export interface MoveRules {
   mode: 'dm' | 'turn' | 'free';

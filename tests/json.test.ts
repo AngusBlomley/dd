@@ -10,7 +10,7 @@ function sampleMap(): MapRecord {
   cellAt(grid, 3, 2)!.p = 'torch';
   const sd = cellAt(grid, 4, 2)!; sd.d = true; sd.secret = true;
   return {
-    id: 'm1', name: 'Goblin Warren', grid,
+    id: 'm1', name: 'Goblin Warren', nextMapId: 'm2', grid,
     tokens: [{
       id: 1, name: 'Spider', type: 'monster' as const, x: 1, y: 1, color: '#a13a2d', size: 1,
       vision: { radius: 12, darkvision: 12 }, light: null, hidden: true,
@@ -25,6 +25,7 @@ describe('map JSON round trip', () => {
     const parsed = parseMap(JSON.parse(JSON.stringify(serializeMap(m))));
     expect(parsed.id).toBe('m1');
     expect(parsed.name).toBe('Goblin Warren');
+    expect(parsed.nextMapId).toBe('m2');
     expect(parsed.grid.w).toBe(6);
     expect(cellAt(parsed.grid, 2, 2)!.w).toBe(true);
     expect(cellAt(parsed.grid, 3, 2)!.p).toBe('torch');

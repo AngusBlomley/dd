@@ -1,12 +1,14 @@
 /* Generator panel, map settings (resize, clear fog), layers panel. */
 
+import { addMap, newMapRecord } from '../campaign';
 import { generateDungeon, type GeneratorOptions } from '../engine/generator';
 import { resizeGrid } from '../engine/grid';
 import { requestRender } from '../render/canvas';
 import { markChanged, pushUndo, state, type Layers, type Overlays } from '../state';
+import { renderMapList } from './campaignPanel';
 import { $ } from './dom';
 import { setStatus } from './status';
-import { renderTokenList } from './tokens';
+import { renderInspector, renderTokenList } from './tokens';
 
 const num = (id: string) => parseInt($<HTMLInputElement>(id).value, 10);
 
@@ -24,7 +26,8 @@ export function initGeneratorPanel(): void {
   $('genTheme').addEventListener('change', syncGeneratorLabels);
   syncGeneratorLabels();
   $('btnGenerate').addEventListener('click', () => {
-    pushUndo();
+    const replace = $<HTMLInputElement>('genReplace').checked;
+    if (replace) pushUndo();
     const roomMin = num('genRoomMin');
     const opts: GeneratorOptions = {
       w: num('genW'),
@@ -39,9 +42,19 @@ export function initGeneratorPanel(): void {
       stairsDown: num('genStairsDown'),
       seed: $<HTMLInputElement>('genSeed').value.trim(),
     };
-    state.grid = generateDungeon(opts);
-    state.tokens.forEach(t => { t.x = Math.min(t.x, state.grid.w - 1); t.y = Math.min(t.y, state.grid.h - 1); });
-    markChanged();
+    const grid = generateDungeon(opts);
+    if (replace) {
+      state.grid = grid;
+      state.tokens.forEach(t => { t.x = Math.min(t.x, state.grid.w - 1); t.y = Math.min(t.y, state.grid.h - 1); });
+      markChanged();
+    } else {
+      // Each generation becomes its own map (issue #6): the previous map and its tokens stay as they were.
+      const themeLabel = $<HTMLSelectElement>('genTheme').selectedOptions[0]?.textContent?.split(' (')[0] ?? 'Map';
+      const count = (state.campaign?.maps.length ?? 0) + 1;
+      const name = opts.seed ? `${themeLabel} · ${opts.seed}` : `${themeLabel} ${count}`;
+      addMap(newMapRecord(name, grid));
+      renderMapList(); renderTokenList(); renderInspector();
+    }
     requestRender(); setStatus();
   });
 }

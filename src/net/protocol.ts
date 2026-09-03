@@ -32,7 +32,7 @@ export interface ViewPatch {
 }
 
 export type MoveMode = 'dm' | 'turn' | 'free';
-export type MoveDenial = 'not-your-token' | 'not-your-turn' | 'blocked' | 'too-far' | 'no-path' | 'out-of-bounds';
+export type MoveDenial = 'not-your-token' | 'not-your-turn' | 'blocked' | 'too-far' | 'no-path' | 'out-of-bounds' | 'not-adjacent' | 'not-a-door';
 
 export interface Assignment {
   mapId: string | null;   // map the player's token is on (or the DM's active map when unassigned)
@@ -49,6 +49,7 @@ export interface Assignment {
 export type ClientMessage =
   | { type: 'hello'; playerId: string; name: string }
   | { type: 'move'; tokenId: number; x: number; y: number }
+  | { type: 'door'; tokenId: number; x: number; y: number }
   | { type: 'ping' };
 
 export type HostMessage =

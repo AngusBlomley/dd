@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 // campaign.ts schedules autosaves with window timers; give it a stub window in node.
 (globalThis as any).window = { setTimeout: () => 0, clearTimeout: () => undefined, addEventListener: () => undefined };
 
-import { entriesOf, newCampaign, newMapRecord, transferToken } from '../src/campaign';
+import { arrivalCell, entriesOf, newCampaign, newMapRecord, resolveExit, setNextMap, transferToken } from '../src/campaign';
 import type { Token } from '../src/engine/data';
 import { cellAt, createGrid } from '../src/engine/grid';
 import { onChange, state } from '../src/state';
@@ -70,6 +70,24 @@ describe('linked maps: transferToken', () => {
     expect(state.tokens).toBe(b.tokens);
     expect(state.nextTokenId).toBe(3);
     expect(state.tokens.map(t => t.name)).toEqual(['PC 1', 'PC 2']);
+  });
+
+  it('resolves exits through an explicit link, else the map\'s next map (issue #7)', () => {
+    const [a, b] = state.campaign!.maps;
+    expect(resolveExit(a, 9, 9)).toEqual({ map: b, x: 3, y: 3 });   // linked
+    cellAt(a.grid, 0, 9)!.p = 'exit';                               // unlinked exit
+    expect(resolveExit(a, 0, 9)).toBeNull();
+    setNextMap(a.id, b.id);
+    expect(resolveExit(a, 0, 9)).toEqual({ map: b, x: 6, y: 1 });   // first entry on b
+    expect(resolveExit(a, 1, 1)).toBeNull();                         // not an exit
+    setNextMap(a.id, a.id);                                          // a map cannot be its own next map
+    expect(a.nextMapId).toBeNull();
+  });
+
+  it('arrival falls back to the first walkable cell when a map has no entry', () => {
+    const c = newMapRecord('Bare', createGrid(4, 4, 'stone'));
+    cellAt(c.grid, 0, 0)!.w = true;
+    expect(arrivalCell(c)).toEqual({ x: 1, y: 0 });
   });
 
   it('is noticed by change listeners (so the host pushes new views)', () => {

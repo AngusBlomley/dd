@@ -3,6 +3,7 @@
 
 import { PROP_MAP, TERRAIN_MAP } from '../engine/data';
 import { BRIGHT, DIM, SEEN_DARKVISION, SEEN_DIM, UNSEEN, tokenVisibleToParty } from '../engine/lighting';
+import { mapById, resolveExit } from '../campaign';
 import { scene, state, type Layers, type Overlays } from '../state';
 
 export const canvas = document.getElementById('mapCanvas') as HTMLCanvasElement;
@@ -53,6 +54,8 @@ export interface PaintOptions {
   overlays?: { flags: Overlays; light: ArrayLike<number>; party: ArrayLike<number>; monsters: ArrayLike<number>; explored: (i: number) => boolean };
   tokens: PaintToken[];
   highlightCell?: { x: number; y: number } | null;
+  /** DM view: a short label to draw under an exit, e.g. the map it leads to. */
+  exitLabel?: (i: number) => string | null;
 }
 
 function drawCell(c: CanvasRenderingContext2D, x: number, y: number, cs: number, grey: boolean, look: Look, playerSide: boolean, L: Layers): void {
@@ -152,6 +155,22 @@ export function paintMap(o: PaintOptions): void {
     }
   }
 
+  if (o.exitLabel && o.layers.props && cs >= 16) {
+    c.font = 'bold ' + Math.max(8, Math.round(cs * 0.28)) + 'px sans-serif';
+    c.textAlign = 'center'; c.textBaseline = 'bottom';
+    for (let i = 0; i < w * h; i++) {
+      const label = o.exitLabel(i);
+      if (!label) continue;
+      const x = i % w, y = (i - x) / w;
+      const text = label.length > 10 ? label.slice(0, 9) + '…' : label;
+      const tw = c.measureText(text).width + 6;
+      c.fillStyle = 'rgba(16,13,9,0.85)';
+      c.fillRect(x * cs + cs / 2 - tw / 2, y * cs + cs - Math.round(cs * 0.34), tw, Math.round(cs * 0.32));
+      c.fillStyle = '#f4b94a';
+      c.fillText(text, x * cs + cs / 2, y * cs + cs - 2);
+    }
+  }
+
   if (o.highlightCell) {
     c.strokeStyle = '#f4b94a'; c.lineWidth = 3;
     c.strokeRect(o.highlightCell.x * cs + 2, o.highlightCell.y * cs + 2, cs - 4, cs - 4);
@@ -217,6 +236,13 @@ export function render(): void {
       .filter(t => !playerSide || tokenVisibleToParty(t, sc.party, grid.w))
       .map(t => ({ x: t.x, y: t.y, size: t.size, color: t.color, initials: initialsOf(t.name), light: !!t.light, hidden: t.hidden, selected: t.id === state.selectedTokenId, turn: !playerSide && t.id === state.turnTokenId })),
     highlightCell: playerSide ? null : state.selectedCell,
+    exitLabel: playerSide ? undefined : (i) => {
+      if (cells[i].p !== 'exit') return null;
+      const rec = state.mapId ? mapById(state.mapId) : undefined;
+      if (!rec) return null;
+      const r = resolveExit({ ...rec, grid, tokens: state.tokens }, i % grid.w, Math.floor(i / grid.w));
+      return r ? '→ ' + r.map.name : 'no link';
+    },
   });
 }
 
