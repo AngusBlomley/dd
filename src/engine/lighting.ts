@@ -8,7 +8,7 @@
    Party vision is the union over player characters only. Nothing else contributes. */
 
 import { PROP_MAP, type Token } from './data';
-import { computeFov, emptyMask } from './fov';
+import { computeFov, emptyMask, isOpaque, isOpaqueInDaylight } from './fov';
 import { cellAt, rememberCell, type Grid } from './grid';
 
 export const DARK = 0, DIM = 1, BRIGHT = 2;
@@ -91,7 +91,7 @@ export function computeVision(grid: Grid, viewers: Token[], light: Uint8Array, l
     const dark = Math.max(TOUCH_RANGE, v.vision.darkvision);
     const reach = Math.max(vision, dark);
     fov.fill(0);
-    computeFov(grid, v.x, v.y, reach, fov);
+    computeFov(grid, v.x, v.y, reach, fov, lit ? isOpaqueInDaylight : isOpaque);
     const v2 = (vision + 0.5) * (vision + 0.5);
     const d2 = (dark + 0.5) * (dark + 0.5);
     for (let i = 0; i < fov.length; i++) {

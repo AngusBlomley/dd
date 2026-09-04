@@ -14,6 +14,15 @@ export function isOpaque(cell: Cell | null): boolean {
   return false;
 }
 
+/** Daylight rule (issue #28): ordinary doors never cast shadows; walls, unrevealed secret doors and blocking props still do. */
+export function isOpaqueInDaylight(cell: Cell | null): boolean {
+  if (!cell) return true;
+  if (cell.w) return true;
+  if (cell.d && cell.secret && !cell.doOpen) return true;
+  if (cell.p && PROP_MAP[cell.p] && PROP_MAP[cell.p].blocksLOS) return true;
+  return false;
+}
+
 /** A visibility mask: one byte per cell, 1 = visible. */
 export type Mask = Uint8Array;
 
@@ -34,11 +43,11 @@ const QUADRANTS: ((ox: number, oy: number, depth: number, col: number) => [numbe
  * (allocating a new mask when none is given). Opaque cells that are in view
  * are marked too: you can see the wall you are looking at.
  */
-export function computeFov(grid: Grid, ox: number, oy: number, radius: number, out?: Mask): Mask {
+export function computeFov(grid: Grid, ox: number, oy: number, radius: number, out?: Mask, opaque: (cell: Cell | null) => boolean = isOpaque): Mask {
   const mask = out ?? emptyMask(grid);
   const w = grid.w;
   const r2 = (radius + 0.5) * (radius + 0.5);
-  const blockedAt = (x: number, y: number) => isOpaque(cellAt(grid, x, y));
+  const blockedAt = (x: number, y: number) => opaque(cellAt(grid, x, y));
 
   if (ox < 0 || oy < 0 || ox >= grid.w || oy >= grid.h) return mask;
   mask[oy * w + ox] = 1;

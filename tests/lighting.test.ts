@@ -248,3 +248,20 @@ describe('fully lit maps (issue #26)', () => {
     expect(computeScene(g, [pc], false).party[2 * 40 + 25]).toBe(UNSEEN); // unlit: too far and dark
   });
 });
+
+describe('doors on lit maps (issue #28)', () => {
+  it('closed doors do not cast shadows in daylight, but walls and secret doors still do', () => {
+    const g = corridor(30);
+    const door = cellAt(g, 10, 1)!; door.d = true; door.doOpen = false;
+    const secret = cellAt(g, 20, 1)!; secret.d = true; secret.secret = true;
+    const pc = token({ x: 5, y: 1 });
+    const lit = computeScene(g, [pc], true);
+    expect(at(lit.party, g, 10, 1)).toBe(SEEN_BRIGHT);
+    expect(at(lit.party, g, 15, 1)).toBe(SEEN_BRIGHT);   // beyond the closed door
+    expect(at(lit.party, g, 20, 1)).toBe(SEEN_BRIGHT);   // the secret door reads as a wall
+    expect(at(lit.party, g, 21, 1)).toBe(UNSEEN);        // nothing behind it
+    // the same closed door still blocks on an unlit map
+    const dark = computeScene(g, [{ ...pc, light: { bright: 8, dim: 12 } }], false);
+    expect(at(dark.party, g, 11, 1)).toBe(UNSEEN);
+  });
+});
