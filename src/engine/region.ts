@@ -45,7 +45,7 @@ export function clearRegion(grid: Grid, tokens: Token[], r: Rect, what: ClearWha
     for (let x = r.x0; x <= r.x1; x++) {
       const c = cellAt(grid, x, y);
       if (!c) continue;
-      if (props) { c.p = null; c.link = null; c.loot = null; }
+      if (props) { c.p = null; c.link = null; c.loot = null; c.rot = 0; }
       if (structure) { c.w = false; c.d = false; c.secret = false; c.doOpen = false; }
     }
   }
@@ -66,14 +66,14 @@ export function moveRegion(grid: Grid, tokens: Token[], r: Rect, dx: number, dy:
     for (let x = r.x0; x <= r.x1; x++) {
       const c = cellAt(grid, x, y)!;
       snapshot.push({ x, y, cell: { ...c, link: c.link ? { ...c.link } : null, loot: c.loot ? { ...c.loot } : null } });
-      c.w = false; c.d = false; c.secret = false; c.doOpen = false; c.p = null; c.link = null; c.loot = null;
+      c.w = false; c.d = false; c.secret = false; c.doOpen = false; c.p = null; c.link = null; c.loot = null; c.rot = 0;
     }
   }
   for (const s of snapshot) {
     const d = cellAt(grid, s.x + dx, s.y + dy);
     if (!d) continue;
     d.t = s.cell.t; d.w = s.cell.w; d.d = s.cell.d; d.secret = s.cell.secret; d.doOpen = s.cell.doOpen;
-    d.p = s.cell.p; d.link = s.cell.link; d.loot = s.cell.loot;
+    d.p = s.cell.p; d.link = s.cell.link; d.loot = s.cell.loot; d.rot = s.cell.rot ?? 0;
   }
   for (const t of tokens) {
     if (!rectContains(r, t.x, t.y)) continue;

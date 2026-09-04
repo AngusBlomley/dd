@@ -8,6 +8,7 @@ export interface CellMemory {
   doOpen: boolean;
   p: string | null;
   secret: boolean;
+  rot: number;
 }
 
 /** Where an exit prop leads: a cell on another (or the same) map. */
@@ -25,6 +26,7 @@ export interface Cell {
   p: string | null;         // prop id
   link?: MapLink | null;    // for p === 'exit': where it leads
   loot?: Loot | null;       // for chests and treasure: what it is
+  rot?: number;             // props: quarter turns clockwise; doors: 0 auto, 1 across, 2 up-down
   mem: CellMemory | null;   // fog memory: null = never seen by the party
 }
 
@@ -39,7 +41,7 @@ export function newCell(terrain: string = 'void'): Cell {
 }
 
 export function rememberCell(c: Cell): void {
-  c.mem = { t: c.t, w: c.w, d: c.d, doOpen: c.doOpen, p: c.p, secret: c.secret };
+  c.mem = { t: c.t, w: c.w, d: c.d, doOpen: c.doOpen, p: c.p, secret: c.secret, rot: c.rot ?? 0 };
 }
 
 export function createGrid(w: number, h: number, fillTerrain: string = 'void'): Grid {

@@ -16,6 +16,8 @@ export function setStatus(): void {
   $('statView').textContent = state.playerView ? 'Player' : (state.dmPreview ? 'DM (preview)' : 'DM');
   $<HTMLInputElement>('mapW').value = String(state.grid.w);
   $<HTMLInputElement>('mapH').value = String(state.grid.h);
+  $<HTMLInputElement>('mapLit').checked = state.mapLit;
+  $('statView').textContent += state.mapLit ? ' · lit' : '';
 
   const mapName = state.campaign?.maps.find(m => m.id === state.mapId)?.name ?? '—';
   $('btnCampaignName').textContent = (state.campaign?.name ?? 'Campaign') + ' › ' + mapName;

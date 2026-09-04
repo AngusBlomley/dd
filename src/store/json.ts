@@ -15,6 +15,7 @@ export interface MapFile {
   id?: string;
   name?: string;
   nextMapId?: string | null;
+  lit?: boolean;
   gridW: number;
   gridH: number;
   cells: Cell[];
@@ -27,6 +28,7 @@ export interface MapRecord {
   id: string;
   name: string;
   nextMapId?: string | null; // where unlinked exits lead
+  lit?: boolean;             // daylight: every cell counts as bright and sight is limited only by walls
   grid: Grid;
   tokens: Token[];
   nextTokenId: number;
@@ -53,7 +55,7 @@ export function newId(): string {
 
 export function serializeMap(map: MapRecord): MapFile {
   return {
-    format: MAP_FORMAT, id: map.id, name: map.name, nextMapId: map.nextMapId ?? null,
+    format: MAP_FORMAT, id: map.id, name: map.name, nextMapId: map.nextMapId ?? null, lit: !!map.lit,
     gridW: map.grid.w, gridH: map.grid.h, cells: map.grid.cells,
     tokens: map.tokens, nextTokenId: map.nextTokenId, savedAt: Date.now(),
   };
@@ -68,14 +70,15 @@ export function serializeCampaign(c: Campaign): CampaignFile {
 
 /* ---------- migration ---------- */
 
-interface LegacyCell { t: string; w?: boolean; d?: boolean; doOpen?: boolean; secret?: boolean; p?: string | null; link?: MapLink | null; loot?: Partial<Loot> | null; ex?: boolean; mem?: Partial<CellMemory> | null }
+interface LegacyCell { t: string; w?: boolean; d?: boolean; doOpen?: boolean; secret?: boolean; p?: string | null; link?: MapLink | null; loot?: Partial<Loot> | null; rot?: number; ex?: boolean; mem?: Partial<CellMemory> | null }
 
 function migrateCell(c: LegacyCell): Cell {
   const cell: Cell = { t: c.t || 'void', w: !!c.w, d: !!c.d, doOpen: !!c.doOpen, secret: !!c.secret, p: c.p || null, mem: null };
   if (c.link && typeof c.link.mapId === 'string') cell.link = { mapId: c.link.mapId, x: c.link.x | 0, y: c.link.y | 0 };
   if (c.loot && (c.loot.title || c.loot.text)) cell.loot = { title: String(c.loot.title || ''), text: String(c.loot.text || ''), pickup: !!c.loot.pickup };
-  if (c.mem) cell.mem = { t: c.mem.t || cell.t, w: !!c.mem.w, d: !!c.mem.d, doOpen: !!c.mem.doOpen, p: c.mem.p || null, secret: !!c.mem.secret };
-  else if (c.ex) cell.mem = { t: cell.t, w: cell.w, d: cell.d, doOpen: cell.doOpen, p: cell.p, secret: cell.secret };
+  if (typeof c.rot === 'number' && c.rot) cell.rot = ((c.rot % 4) + 4) % 4;
+  if (c.mem) cell.mem = { t: c.mem.t || cell.t, w: !!c.mem.w, d: !!c.mem.d, doOpen: !!c.mem.doOpen, p: c.mem.p || null, secret: !!c.mem.secret, rot: c.mem.rot ?? 0 };
+  else if (c.ex) cell.mem = { t: cell.t, w: cell.w, d: cell.d, doOpen: cell.doOpen, p: cell.p, secret: cell.secret, rot: cell.rot ?? 0 };
   return cell;
 }
 
@@ -114,6 +117,7 @@ export function parseMap(data: Partial<MapFile>, fallbackName = 'Untitled map'):
     id: data.id || newId(),
     name: data.name || fallbackName,
     nextMapId: typeof data.nextMapId === 'string' ? data.nextMapId : null,
+    lit: !!data.lit,
     grid: { w: data.gridW, h: data.gridH, cells },
     tokens,
     nextTokenId: data.nextTokenId || (tokens.length + 1),

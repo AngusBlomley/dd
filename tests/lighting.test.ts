@@ -216,7 +216,7 @@ describe('explored memory (spec acceptance test 6)', () => {
     const pc = token({ x: 3, y: 1, light: { bright: 3, dim: 3 } });
     markExplored(g, computeScene(g, [pc]).party);
     const seenCell = cellAt(g, 6, 1)!;
-    expect(seenCell.mem).toEqual({ t: 'stone', w: false, d: false, doOpen: false, p: null, secret: false });
+    expect(seenCell.mem).toEqual({ t: 'stone', w: false, d: false, doOpen: false, p: null, secret: false, rot: 0 });
 
     // party walks away, DM builds a wall and drops a chest where they used to be
     pc.x = 25;
@@ -232,5 +232,19 @@ describe('explored memory (spec acceptance test 6)', () => {
     markExplored(g, computeScene(g, [pc]).party);
     expect(cellAt(g, 5, 1)!.mem!.p).toBe('chest');
     expect(seenCell.mem!.w).toBe(true);
+  });
+});
+
+describe('fully lit maps (issue #26)', () => {
+  it('every cell is bright and sight is limited only by walls', () => {
+    const g = createGrid(40, 5, 'stone');
+    cellAt(g, 30, 2)!.w = true;
+    const pc = token({ x: 2, y: 2, vision: { radius: 3, darkvision: 0 } });
+    const scene = computeScene(g, [pc], true);
+    expect(at(scene.light, g, 39, 2)).toBe(BRIGHT);
+    expect(at(scene.party, g, 25, 2)).toBe(SEEN_BRIGHT);   // far beyond a 3-cell vision radius
+    expect(at(scene.party, g, 30, 2)).toBe(SEEN_BRIGHT);   // the wall itself
+    expect(at(scene.party, g, 31, 2)).toBe(UNSEEN);        // behind it
+    expect(computeScene(g, [pc], false).party[2 * 40 + 25]).toBe(UNSEEN); // unlit: too far and dark
   });
 });

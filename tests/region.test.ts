@@ -40,7 +40,7 @@ describe('region selection (issue #25)', () => {
     cellAt(g, 2, 2)!.w = true;
     const door = cellAt(g, 3, 2)!; door.d = true; door.secret = true;
     const exit = cellAt(g, 2, 3)!; exit.p = 'exit'; exit.link = { mapId: 'm2', x: 1, y: 1 }; exit.t = 'wood';
-    const chest = cellAt(g, 3, 3)!; chest.p = 'chest'; chest.loot = { title: 'Gold', text: '', pickup: true };
+    const chest = cellAt(g, 3, 3)!; chest.p = 'chest'; chest.loot = { title: 'Gold', text: '', pickup: true }; chest.rot = 3;
     const tokens = [pc(1, 3, 3), pc(2, 0, 0)];
     const moved = moveRegion(g, tokens, { x0: 2, y0: 2, x1: 3, y1: 3 }, 4, 5);
     expect(moved).toEqual({ x0: 6, y0: 7, x1: 7, y1: 8 });
@@ -48,6 +48,7 @@ describe('region selection (issue #25)', () => {
     expect(cellAt(g, 7, 7)!.d).toBe(true); expect(cellAt(g, 7, 7)!.secret).toBe(true);
     expect(cellAt(g, 6, 8)!.p).toBe('exit'); expect(cellAt(g, 6, 8)!.link).toEqual({ mapId: 'm2', x: 1, y: 1 }); expect(cellAt(g, 6, 8)!.t).toBe('wood');
     expect(cellAt(g, 7, 8)!.loot).toEqual({ title: 'Gold', text: '', pickup: true });
+    expect(cellAt(g, 7, 8)!.rot).toBe(3);
     expect(tokens[0]).toMatchObject({ x: 7, y: 8 });
     expect(tokens[1]).toMatchObject({ x: 0, y: 0 });
     // source cleared of structure and props, terrain kept

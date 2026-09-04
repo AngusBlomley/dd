@@ -48,7 +48,7 @@ describe('buildMapView (what players are allowed to know)', () => {
     sd.doOpen = true;
     const open = buildMapView(m, computeScene(m.grid, m.tokens));
     expect(open.cells[1 * 30 + 8]).toEqual({ t: 'stone', w: false, d: true, doOpen: true, p: null });
-    expect(publicCell({ t: 'x', w: false, d: true, doOpen: false, secret: false, p: null })).toEqual({ t: 'x', w: false, d: true, doOpen: false, p: null });
+    expect(publicCell({ t: 'x', w: false, d: true, doOpen: false, secret: false, p: null, rot: 0 })).toEqual({ t: 'x', w: false, d: true, doOpen: false, p: null });
   });
 
   it('never includes hidden tokens or unseen monsters, and sends initials not names', () => {
@@ -111,6 +111,19 @@ describe('NPC role and trade (issue #22)', () => {
     m.tokens[1].trade = 'Closed for the night.';
     const patch = diffViews(view, buildMapView(m, computeScene(m.grid, m.tokens)))!;
     expect(patch.tokens!.find(t => t.id === 2)!.info!.trade).toBe('Closed for the night.');
+  });
+});
+
+describe('prop rotation reaches players (issue #27)', () => {
+  it('sends the rotation and diffs when it changes', () => {
+    const m = corridorMap();
+    const b = cellAt(m.grid, 7, 1)!; b.p = 'barrel'; b.rot = 1;
+    m.tokens.push(token({ id: 1, x: 5, y: 1, light: { bright: 6, dim: 6 } }));
+    const view = buildMapView(m, computeScene(m.grid, m.tokens));
+    expect(view.cells[1 * 30 + 7]!.rot).toBe(1);
+    b.rot = 2;
+    const patch = diffViews(view, buildMapView(m, computeScene(m.grid, m.tokens)))!;
+    expect(patch.cells![1 * 30 + 7]!.rot).toBe(2);
   });
 });
 

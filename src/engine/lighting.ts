@@ -41,10 +41,11 @@ export interface LightMap {
   intensity: Float32Array;  // 1 inside bright, fading to ~0 at the dim edge; 0 in the dark
 }
 
-/** Light per cell. Overlapping lights take the brightest. */
-export function computeLightMap(grid: Grid, sources: LightSource[]): LightMap {
+/** Light per cell. Overlapping lights take the brightest. A lit map is bright everywhere. */
+export function computeLightMap(grid: Grid, sources: LightSource[], lit = false): LightMap {
   const level = new Uint8Array(grid.w * grid.h);
   const intensity = new Float32Array(grid.w * grid.h);
+  if (lit) { level.fill(BRIGHT); intensity.fill(1); return { level, intensity }; }
   const fov = emptyMask(grid);
   for (const s of sources) {
     const reach = Math.max(s.bright, s.dim);
@@ -81,11 +82,12 @@ export const TOUCH_RANGE = 1;
  * Bright light within vision radius -> SEEN_BRIGHT; dim -> SEEN_DIM;
  * darkness within darkvision radius, or within touch range -> SEEN_DARKVISION.
  */
-export function computeVision(grid: Grid, viewers: Token[], light: Uint8Array): Uint8Array {
+export function computeVision(grid: Grid, viewers: Token[], light: Uint8Array, lit = false): Uint8Array {
   const seen = new Uint8Array(grid.w * grid.h);
   const fov = emptyMask(grid);
   for (const v of viewers) {
-    const vision = Math.max(0, v.vision.radius);
+    // in daylight only walls limit how far you see
+    const vision = lit ? grid.w + grid.h : Math.max(0, v.vision.radius);
     const dark = Math.max(TOUCH_RANGE, v.vision.darkvision);
     const reach = Math.max(vision, dark);
     fov.fill(0);
@@ -114,14 +116,14 @@ export interface Scene {
   monsters: Uint8Array;     // SeeLevel per cell, monster tokens only (DM overlay)
 }
 
-/** Pure: computes the whole scene without touching the grid. */
-export function computeScene(grid: Grid, tokens: Token[]): Scene {
-  const lm = computeLightMap(grid, collectLightSources(grid, tokens));
+/** Pure: computes the whole scene without touching the grid. `lit` = daylight map (issue #26). */
+export function computeScene(grid: Grid, tokens: Token[], lit = false): Scene {
+  const lm = computeLightMap(grid, collectLightSources(grid, tokens), lit);
   return {
     light: lm.level,
     intensity: lm.intensity,
-    party: computeVision(grid, tokens.filter(isPartyToken), lm.level),
-    monsters: computeVision(grid, tokens.filter(t => t.type === 'monster'), lm.level),
+    party: computeVision(grid, tokens.filter(isPartyToken), lm.level, lit),
+    monsters: computeVision(grid, tokens.filter(t => t.type === 'monster'), lm.level, lit),
   };
 }
 

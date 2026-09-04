@@ -10,7 +10,7 @@ import { canvas, effCell, render, requestRender } from '../render/canvas';
 import { markChanged, popRedo, popUndo, pushUndo, state, type Overlays } from '../state';
 import { $ } from './dom';
 import { setStatus } from './status';
-import { cancelPlacing, createTokenAt, renderInspector, renderTokenList } from './tokens';
+import { cancelPlacing, createTokenAt, renderInspector, renderTokenList, rotateSelectedCell } from './tokens';
 
 const wrap = $('canvas-wrap');
 const MIN_ZOOM = 0.35, MAX_ZOOM = 3;
@@ -48,11 +48,11 @@ function applyToolAtCell(x: number, y: number): void {
   if (!c) return;
   switch (state.tool) {
     case 'terrain': c.t = state.selectedTerrain; c.w = false; break;
-    case 'wall': c.w = true; c.d = false; c.secret = false; c.p = null; break;
+    case 'wall': c.w = true; c.d = false; c.secret = false; c.p = null; c.rot = 0; break;
     case 'door': c.d = true; c.secret = false; c.doOpen = false; c.w = false; c.p = null; break;
     case 'secretdoor': c.d = true; c.secret = true; c.doOpen = false; c.w = false; c.p = null; break;
-    case 'prop': c.p = state.selectedProp; c.w = false; c.d = false; c.secret = false; break;
-    case 'eraser': c.w = false; c.d = false; c.secret = false; c.doOpen = false; c.p = null; break;
+    case 'prop': if (c.p !== state.selectedProp) c.rot = 0; c.p = state.selectedProp; c.w = false; c.d = false; c.secret = false; break;
+    case 'eraser': c.w = false; c.d = false; c.secret = false; c.doOpen = false; c.p = null; c.rot = 0; break;
   }
 }
 
@@ -231,9 +231,9 @@ function onPointerMove(e: PointerEvent): void {
       if (!to.w && !to.d) {
         if (!propMoveStarted) { pushUndo(); propMoveStarted = true; }
         // carry the prop and everything attached to it; whatever was on the target swaps back
-        const swap = { p: to.p, link: to.link ?? null, loot: to.loot ?? null };
-        to.p = from.p; to.link = from.link ?? null; to.loot = from.loot ?? null;
-        from.p = swap.p; from.link = swap.link; from.loot = swap.loot;
+        const swap = { p: to.p, link: to.link ?? null, loot: to.loot ?? null, rot: to.rot ?? 0 };
+        to.p = from.p; to.link = from.link ?? null; to.loot = from.loot ?? null; to.rot = from.rot ?? 0;
+        from.p = swap.p; from.link = swap.link; from.loot = swap.loot; from.rot = swap.rot;
         draggingProp = { x, y };
         state.selectedCell = { x, y };
         markChanged(); requestRender();
@@ -338,6 +338,7 @@ export function initInteraction(): void {
     if (e.code === 'Space' && !spaceHeld) { spaceHeld = true; canvas.classList.add('tool-pan'); e.preventDefault(); }
     if (e.key === 'v' || e.key === 'V') setTool('select');
     if ((e.key === 'r' || e.key === 'R') && state.tool === 'prefab') rotatePrefabTool();
+    else if ((e.key === 'r' || e.key === 'R') && state.selectedCell) rotateSelectedCell();
     if (e.key === 'h' || e.key === 'H') setTool(state.tool === 'pan' ? 'terrain' : 'pan');
     if (e.key === '=' || e.key === '+') setZoom(state.zoom * 1.15);
     if (e.key === '-' || e.key === '_') setZoom(state.zoom / 1.15);

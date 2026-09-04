@@ -10,6 +10,7 @@ import type { MapView, ViewCell, ViewToken } from './protocol';
 export function publicCell(c: Cell | CellMemory): ViewCell {
   if (c.d && c.secret && !c.doOpen) return { t: c.t, w: true, d: false, doOpen: false, p: null };
   const out: ViewCell = { t: c.t, w: c.w, d: c.d, doOpen: c.doOpen, p: c.p };
+  if (c.rot) out.rot = c.rot;
   const loot = (c as Cell).loot;
   if (loot && c.p && (loot.title || loot.text)) out.loot = { title: loot.title, text: loot.text, canTake: loot.pickup && LOOT_PROPS.has(c.p) };
   return out;

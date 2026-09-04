@@ -52,6 +52,7 @@ export interface AppState {
   turnTokenId: number | null; // token whose turn it is, when on the active map (drawn with a ring)
   placingToken: boolean; // "Place on Map" armed; the form is read at click time
   dirty: boolean;        // unsaved changes since the last autosave
+  mapLit: boolean;       // the active map is fully lit (mirrors the map record)
 }
 
 export const state: AppState = {
@@ -82,6 +83,7 @@ export const state: AppState = {
   turnTokenId: null,
   placingToken: false,
   dirty: false,
+  mapLit: false,
 };
 
 /* ---------- change notification ----------
@@ -103,7 +105,7 @@ let sceneCache: Scene | null = null;
 export function invalidateScene(): void { sceneCache = null; }
 export function scene(): Scene {
   if (!sceneCache) {
-    sceneCache = computeScene(state.grid, state.tokens);
+    sceneCache = computeScene(state.grid, state.tokens, state.mapLit);
     if (markExplored(state.grid, sceneCache.party) > 0) {
       state.dirty = true;
       for (const fn of changeListeners) fn();

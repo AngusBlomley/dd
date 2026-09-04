@@ -4,7 +4,7 @@
 
 /** What a player may know about one cell. Secret doors arrive as walls. */
 export interface ViewLoot { title: string; text: string; canTake: boolean }
-export interface ViewCell { t: string; w: boolean; d: boolean; doOpen: boolean; p: string | null; loot?: ViewLoot }
+export interface ViewCell { t: string; w: boolean; d: boolean; doOpen: boolean; p: string | null; rot?: number; loot?: ViewLoot }
 
 /** What a player may know about a token: no names (initials only), no hidden tokens. */
 export interface ViewToken {
@@ -74,7 +74,7 @@ export const PROTOCOL_VERSION = 1;
 function sameCell(a: ViewCell | null, b: ViewCell | null): boolean {
   if (a === b) return true;
   if (!a || !b) return false;
-  if (!(a.t === b.t && a.w === b.w && a.d === b.d && a.doOpen === b.doOpen && a.p === b.p)) return false;
+  if (!(a.t === b.t && a.w === b.w && a.d === b.d && a.doOpen === b.doOpen && a.p === b.p && (a.rot ?? 0) === (b.rot ?? 0))) return false;
   if (!a.loot && !b.loot) return true;
   if (!a.loot || !b.loot) return false;
   return a.loot.title === b.loot.title && a.loot.text === b.loot.text && a.loot.canTake === b.loot.canTake;

@@ -74,6 +74,7 @@ export function switchMap(mapId: string): void {
   state.grid = target.grid;
   state.tokens = target.tokens;
   state.nextTokenId = target.nextTokenId;
+  state.mapLit = !!target.lit;
   state.selectedTokenId = null;
   c.activeMapId = target.id;
   clearHistory();
@@ -133,6 +134,14 @@ export function entriesOf(map: MapRecord): { x: number; y: number }[] {
     if (map.grid.cells[i].p === 'entry') out.push({ x: i % map.grid.w, y: Math.floor(i / map.grid.w) });
   }
   return out;
+}
+
+export function setMapLit(mapId: string, lit: boolean): void {
+  const m = mapById(mapId);
+  if (!m) return;
+  m.lit = lit;
+  if (state.mapId === mapId) state.mapLit = lit;
+  markChanged();
 }
 
 export function setNextMap(mapId: string, nextMapId: string | null): void {

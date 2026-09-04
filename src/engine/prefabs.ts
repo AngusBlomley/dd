@@ -174,7 +174,7 @@ export function stampPrefab(grid: Grid, prefab: Prefab, ox: number, oy: number):
       if (ch === ' ') continue;
       const c = cellAt(grid, ox + rx, oy + ry);
       if (!c) continue;
-      c.w = false; c.d = false; c.secret = false; c.doOpen = false; c.p = null; c.link = null;
+      c.w = false; c.d = false; c.secret = false; c.doOpen = false; c.p = null; c.link = null; c.rot = 0;
       switch (ch) {
         case '#': c.w = true; setFloor(c); break;
         case '.': setFloor(c); break;

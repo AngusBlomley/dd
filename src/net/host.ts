@@ -325,7 +325,7 @@ class HostSession {
 
   private sceneFor(map: MapRecord): Scene {
     if (map.id === state.mapId) return activeScene();
-    const sc = computeScene(map.grid, map.tokens);
+    const sc = computeScene(map.grid, map.tokens, !!map.lit);
     if (markExplored(map.grid, sc.party) > 0) requestSave();
     return sc;
   }

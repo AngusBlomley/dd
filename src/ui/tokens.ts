@@ -338,8 +338,14 @@ function renderDoorInspector(body: HTMLElement, cell: import('../engine/grid').C
     ${cell.secret ? '<button class="btn primary full-btn" id="doorReveal">Reveal to players</button>' : ''}
     <button class="btn full-btn" id="doorToggle">${cell.doOpen ? 'Close door' : 'Open door'}</button>
     ${cell.secret ? '' : '<button class="btn full-btn" id="doorHide">Make secret again</button>'}
-    <div class="hint">Revealing turns the wall into a visible door for the players. Opening it lets light and sight through. Doors draw across whichever wall they sit in.</div>`;
+    <label class="field">Orientation</label>
+    <div class="row2"><button class="btn small${(cell.rot ?? 0) === 0 ? ' primary' : ''}" id="doorAuto">Auto</button><button class="btn small${cell.rot === 1 ? ' primary' : ''}" id="doorAcross">Across ═</button></div>
+    <button class="btn small full-btn${cell.rot === 2 ? ' primary' : ''}" id="doorUpDown" style="margin-top:6px">Up-down ║</button>
+    <div class="hint">Revealing turns the wall into a visible door for the players. Opening it lets light and sight through. Auto follows the wall the door sits in; R cycles the orientation.</div>`;
   const done = () => { markChanged(); requestRender(); renderInspector(); };
+  document.getElementById('doorAuto')?.addEventListener('click', () => { pushUndo(); cell.rot = 0; done(); });
+  document.getElementById('doorAcross')?.addEventListener('click', () => { pushUndo(); cell.rot = 1; done(); });
+  document.getElementById('doorUpDown')?.addEventListener('click', () => { pushUndo(); cell.rot = 2; done(); });
   document.getElementById('doorReveal')?.addEventListener('click', () => { pushUndo(); cell.secret = false; done(); });
   document.getElementById('doorToggle')?.addEventListener('click', () => { pushUndo(); cell.doOpen = !cell.doOpen; done(); });
   document.getElementById('doorHide')?.addEventListener('click', () => { pushUndo(); cell.secret = true; cell.doOpen = false; done(); });
@@ -360,6 +366,7 @@ function renderPropInspector(body: HTMLElement, cell: import('../engine/grid').C
     <textarea id="lootText" rows="5" placeholder="${lootable ? 'e.g. Inside: 40 gp, a silver locket and a potion of healing.' : 'e.g. A weathered statue of a drow matron, one hand raised.'}"></textarea>
     ${lootable ? '<div class="check-row"><input type="checkbox" id="lootPickup"><label for="lootPickup">Players can pick it up (removes it from the map)</label></div>' : ''}
     <div class="hint">Players tap any prop they can see to read its name and this description. ${lootable ? 'If pick-up is allowed, players next to it also get Take, and you see who took it in the Session tab.' : ''}</div>
+    <div class="row2" style="margin-top:8px"><button class="btn small" id="propRotate" title="Rotate (R)">&#8635; Rotate</button><div class="hint" style="margin:0">Turned ${((cell.rot ?? 0) % 4) * 90}°</div></div>
     <div class="hint">Drag it with the Select tool to move it.</div>
     <button class="btn danger full-btn" id="propRemove" style="margin-top:10px">Remove ${escapeHtml(name)}</button>`;
   {
@@ -374,9 +381,10 @@ function renderPropInspector(body: HTMLElement, cell: import('../engine/grid').C
     };
     title.addEventListener('input', commit); text.addEventListener('input', commit); pickup?.addEventListener('change', commit);
   }
+  $('propRotate').addEventListener('click', () => rotateSelectedCell());
   $('propRemove').addEventListener('click', () => {
     pushUndo();
-    cell.p = null; cell.link = null; cell.loot = null;
+    cell.p = null; cell.link = null; cell.loot = null; cell.rot = 0;
     state.selectedCell = null;
     markChanged(); requestRender(); renderInspector();
   });
@@ -403,4 +411,16 @@ function renderSelectionInspector(body: HTMLElement): void {
   $('selRemoveTokens').addEventListener('click', () => clearSelection('tokens'));
   $('selRemoveWalls').addEventListener('click', () => clearSelection('structure'));
   $('selRemoveAll').addEventListener('click', () => clearSelection('all'));
+}
+
+/** Turns the selected prop a quarter turn, or cycles a selected door's orientation (issue #27). */
+export function rotateSelectedCell(): void {
+  if (!state.selectedCell) return;
+  const cell = cellAt(state.grid, state.selectedCell.x, state.selectedCell.y);
+  if (!cell) return;
+  pushUndo();
+  if (cell.d) cell.rot = ((cell.rot ?? 0) + 1) % 3;
+  else if (cell.p) cell.rot = ((cell.rot ?? 0) + 1) % 4;
+  else return;
+  markChanged(); requestRender(); renderInspector();
 }

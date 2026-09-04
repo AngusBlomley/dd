@@ -8,9 +8,10 @@ function sampleMap(): MapRecord {
   const grid = createGrid(6, 4, 'stone');
   cellAt(grid, 2, 2)!.w = true;
   cellAt(grid, 3, 2)!.p = 'torch';
-  const sd = cellAt(grid, 4, 2)!; sd.d = true; sd.secret = true;
+  const sd = cellAt(grid, 4, 2)!; sd.d = true; sd.secret = true; sd.rot = 2;
+    cellAt(grid, 3, 2)!.rot = 1;
   return {
-    id: 'm1', name: 'Goblin Warren', nextMapId: 'm2', grid,
+    id: 'm1', name: 'Goblin Warren', nextMapId: 'm2', lit: true, grid,
     tokens: [{
       id: 1, name: 'Spider', type: 'monster' as const, x: 1, y: 1, color: '#a13a2d', size: 1,
       vision: { radius: 12, darkvision: 12 }, light: null, hidden: true,
@@ -29,6 +30,9 @@ describe('map JSON round trip', () => {
     expect(parsed.id).toBe('m1');
     expect(parsed.name).toBe('Goblin Warren');
     expect(parsed.nextMapId).toBe('m2');
+    expect(parsed.lit).toBe(true);
+    expect(cellAt(parsed.grid, 4, 2)!.rot).toBe(2);
+    expect(cellAt(parsed.grid, 3, 2)!.rot).toBe(1);
     expect(parsed.grid.w).toBe(6);
     expect(cellAt(parsed.grid, 2, 2)!.w).toBe(true);
     expect(cellAt(parsed.grid, 3, 2)!.p).toBe('torch');
@@ -50,7 +54,7 @@ describe('map JSON round trip', () => {
     expect(parsed.name).toBe('Old map');
     expect(parsed.id).toBeTruthy();
     expect(parsed.grid.cells[0]).toEqual({ t: 'stone', w: false, d: false, doOpen: false, secret: false, p: null, mem: null });
-    expect(parsed.grid.cells[1].mem).toEqual({ t: 'void', w: true, d: false, doOpen: false, p: null, secret: false });
+    expect(parsed.grid.cells[1].mem).toEqual({ t: 'void', w: true, d: false, doOpen: false, p: null, secret: false, rot: 0 });
     expect(parsed.tokens[0].vision).toEqual({ radius: 6, darkvision: 0 });
     expect(parsed.tokens[0].light).toEqual({ bright: 4, dim: 8 });
     expect(parsed.tokens[1].vision).toEqual({ radius: 8, darkvision: 8 });

@@ -1,6 +1,6 @@
 /* Generator panel, map settings (resize, clear fog), layers panel. */
 
-import { addMap, newMapRecord } from '../campaign';
+import { addMap, newMapRecord, setMapLit } from '../campaign';
 import { generateDungeon, type GeneratorOptions } from '../engine/generator';
 import { resizeGrid } from '../engine/grid';
 import { requestRender } from '../render/canvas';
@@ -74,6 +74,13 @@ export function initMapSettings(): void {
     state.tokens = state.tokens.filter(t => t.x < w && t.y < h);
     markChanged();
     requestRender(); setStatus(); renderTokenList();
+  });
+
+  $('mapLit').addEventListener('change', (e) => {
+    if (!state.mapId) return;
+    pushUndo();
+    setMapLit(state.mapId, (e.target as HTMLInputElement).checked);
+    requestRender(); setStatus();
   });
 
   $('btnClearFog').addEventListener('click', () => {

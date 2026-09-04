@@ -34,7 +34,7 @@ const COLORS = {
   ovMemory: 'rgba(221,155,52,0.22)',
 };
 
-export interface Look { t: string; w: boolean; d: boolean; doOpen: boolean; secret?: boolean; p: string | null }
+export interface Look { t: string; w: boolean; d: boolean; doOpen: boolean; secret?: boolean; p: string | null; rot?: number }
 export interface PaintToken { x: number; y: number; size: number; color: string; initials: string; light: boolean; hidden?: boolean; selected?: boolean; mine?: boolean; turn?: boolean; ghost?: boolean }
 
 export interface PaintOptions {
@@ -118,7 +118,13 @@ function drawCell(c: CanvasRenderingContext2D, x: number, y: number, cs: number,
       c.font = Math.round(cs * 0.62) + 'px sans-serif';
       c.textAlign = 'center'; c.textBaseline = 'middle';
       c.fillStyle = '#100d09';
-      c.fillText(pd.icon, px + cs / 2, py + cs * 0.56);
+      const rot = (look.rot ?? 0) % 4;
+      if (rot) {
+        c.save(); c.translate(px + cs / 2, py + cs / 2); c.rotate(rot * Math.PI / 2);
+        c.fillText(pd.icon, 0, cs * 0.06); c.restore();
+      } else {
+        c.fillText(pd.icon, px + cs / 2, py + cs * 0.56);
+      }
     }
   }
 }
@@ -155,7 +161,9 @@ export function paintMap(o: PaintOptions): void {
     const l = o.lookAt(j) ?? o.memAt(j);
     return !!l && (l.w || (!!l.d && !!l.secret && o.playerSide));
   };
-  const orientAt = (x: number, y: number): Orient => {
+  const orientAt = (x: number, y: number, look: Look): Orient => {
+    if (look.rot === 1) return 'h';
+    if (look.rot === 2) return 'v';
     const lr = (wallish(x - 1, y) ? 1 : 0) + (wallish(x + 1, y) ? 1 : 0);
     const ud = (wallish(x, y - 1) ? 1 : 0) + (wallish(x, y + 1) ? 1 : 0);
     return ud > lr ? 'v' : 'h';
@@ -171,10 +179,10 @@ export function paintMap(o: PaintOptions): void {
         if (!look) {
           const mem = o.memAt(i);
           if (!mem) { c.fillStyle = COLORS.unseen; c.fillRect(px, py, cs, cs); continue; }
-          drawCell(c, x, y, cs, false, mem, true, o.layers, mem.d ? orientAt(x, y) : 'h');
+          drawCell(c, x, y, cs, false, mem, true, o.layers, mem.d ? orientAt(x, y, mem) : 'h');
           overlay(c, x, y, cs, COLORS.memoryOverlay);
         } else {
-          drawCell(c, x, y, cs, see === SEEN_DARKVISION, look, true, o.layers, look.d ? orientAt(x, y) : 'h');
+          drawCell(c, x, y, cs, see === SEEN_DARKVISION, look, true, o.layers, look.d ? orientAt(x, y, look) : 'h');
           if (see === SEEN_DIM) {
             const a = 0.18 + 0.42 * (1 - Math.min(1, o.intensity[i]));
             overlay(c, x, y, cs, `rgba(5,4,3,${a.toFixed(3)})`);
@@ -182,7 +190,7 @@ export function paintMap(o: PaintOptions): void {
         }
       } else {
         const look = o.lookAt(i)!;
-        drawCell(c, x, y, cs, false, look, false, o.layers, look.d ? orientAt(x, y) : 'h');
+        drawCell(c, x, y, cs, false, look, false, o.layers, look.d ? orientAt(x, y, look) : 'h');
         const ov = o.overlays;
         if (ov) {
           if (ov.flags.light) {
